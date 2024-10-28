@@ -112,7 +112,6 @@ class DropDownViewHelp(disnake.ui.View):
         super().__init__(timeout=None)
         self.add_item(DropDownMenuHelp(time, map, user, ))
 
-
 #! Модалка для таймера
 class Modal(disnake.ui.Modal):
         def __init__(self, comp):
@@ -431,21 +430,22 @@ s - в конце означает «души (soul)»
         view = DropDownViewHelp(map=maps, user=user, time=time.time()+1200)
         await ctx.send(embed=embed_main, view=view)
 
-    @commands.slash_command(name='timer', description='Простая напоминалка. Указывать в минутах.', guild_ids=[1199488197885968515, 958063150144577558])
-    async def timer(self, inter: disnake.AppCmdInter, time:int):
-        if not inter.channel.id in [1205649033125830706, 992673176448417792]:
-            return
-        
-        timeValue= 60
-        try:
-            timeValue = time * 60
-        except:
-            pass
-        embed= disnake.Embed(title=f'Через {timeValue} я вас позову.')
-        user_id = inter.author.id
 
-        comp = [user_id, timeValue, self.bot, inter.channel.id]
-        await inter.response.send_modal(modal=Modal(comp=comp))
+    # @commands.slash_command(name='timer', description='Простая напоминалка. Указывать в минутах.', guild_ids=[1199488197885968515, 958063150144577558])
+    # async def timer(self, inter: disnake.AppCmdInter, time:int):
+        # if not inter.channel.id in [1205649033125830706, 992673176448417792]:
+        #     return
+        
+        # timeValue= 60
+        # try:
+        #     timeValue = time * 60
+        # except:
+        #     pass
+        # embed= disnake.Embed(title=f'Через {timeValue} я вас позову.')
+        # user_id = inter.author.id
+
+        # comp = [user_id, timeValue, self.bot, inter.channel.id]
+        # await inter.response.send_modal(modal=Modal(comp=comp))
 
     @commands.command(name='avatar',  aliases=['ava', 'a', 'ава', 'аватар'])
     async def avatar(self, ctx):
@@ -465,11 +465,33 @@ s - в конце означает «души (soul)»
         raw = ctx.guild.get_member(ctx.message.raw_mentions[0])
         avatar = raw.avatar
         responce = requests.get(url=avatar)
-        with open(f'../bots/content/avatar/{raw.id}.png', 'wb') as file:
+        with open(f'../PonyashkaDiscord/content/avatar/{raw.id}.png', 'wb') as file:
             file.write(responce.content)
             file.close()
 
         await ctx.send(f'/ all ok')
+
+    @commands.command(name='clearconsole', aliases=['cls'])
+    async def clearConsole(self, ctx):
+        import os
+        os.system('cls')
+        os.system('ECHO DUBUG: System console has been cleared')
+        os.system('ECHO ' + '_'*40)
+
+    @commands.command(name='carddrop', aliases=['card'])
+    async def card(self, ctx):
+        from random import choice, randint
+        
+        mast = ['пики ♠', 'буби ♦', 'червы ♥', 'трефы ♣']
+        value = [2, 3, 4, 5, 6, 7, 8, 9, 'Валет', 'Дама', 'Король', 'Туз']
+
+        text = f'{choice(value)} {choice(mast)}'
+        if randint(1, 100) > 90:
+            text = f'О нет! {choice('Красный', 'Черный')} джокер!'
+        
+        embed = disnake.Embed(title=text)
+        await ctx.send(embed=embed)
+
 
 # Загрузка кога в основное ядро по команде
 def setup(bot:commands.Bot): 
