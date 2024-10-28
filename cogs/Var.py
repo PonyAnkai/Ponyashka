@@ -4,7 +4,10 @@ from disnake.ext import commands
 class Var(commands.Cog):
     def __init__(self, bot=commands.Bot):
         self.bot = bot
-
+        
+    @commands.command(name='pomogator')
+    async def pomogator(self, ctx):
+        await ctx.send('Введите запрос')
 
 
 
