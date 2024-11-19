@@ -11,8 +11,8 @@ bot = commands.Bot(command_prefix='!',
                    help_command=None,
                    description=desc)
 
-loadRange = ['Economics', 'Message', 'Events', 'Fun', 'Rpg', 'Administrator', 'Until', 'TestingEver', 'module.SystemDialogsRPG', 'module.SystemCommandRPG', 'module.SystemShop', 'module.SystemViews', 'module.FightLoop', 'PG', 'module.PGModule', 'module.PokemonModule']
-for index in range(len(loadRange)-1):
+loadRange = ['Economics', 'Message', 'Events', 'Fun', 'Rpg', 'Administrator', 'Until', 'TestingEver', 'module.RPG.Dialogs', 'module.RPG.System', 'module.RPG.Shop', 'module.Views', 'module.ponymon.FightLoop', 'PG', 'module.PGModule', 'module.ponymon.Ponymons']
+for index in range(len(loadRange)):
     bot.load_extension(f'cogs.{loadRange[index]}')
 
 bot.run(open("token.txt", 'r').readline())  

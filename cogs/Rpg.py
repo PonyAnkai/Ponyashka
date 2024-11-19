@@ -6,7 +6,7 @@ import time
 from time import time, strftime, gmtime
 from random import randint, choices
 
-from .module.SystemCommandRPG import *
+from .module.RPG.System import *
 from .module.REQ_database import DataBase
 from .materials.enemy_base.lowEnemy import Goblin
 
@@ -92,7 +92,6 @@ class RPG(commands.Cog):
         try:
             with open('../PonyashkaDiscord/config/stat_list.json', encoding='UTF-8') as file:
                 stat_list = json.load(file)
-                file.close()
 
             message = stat_list[f'{inter.message.id}']
 
@@ -119,7 +118,6 @@ class RPG(commands.Cog):
             
             with open('../PonyashkaDiscord/config/stat_list.json', mode='w', encoding='UTF-8', ) as file:
                 file.write(json.dumps(stat_list, indent=3, ensure_ascii=False))
-                file.close()
         except:
             embed = disnake.Embed(title='Информация',description='```Активно иное окно.```')
             await inter.response.edit_message(embed=embed, components=None)
@@ -127,10 +125,6 @@ class RPG(commands.Cog):
 
     @commands.command(name='stat', alises=["стат", "статус"]) #! Aliases add more variation
     async def stat(self, ctx, study=False):
-        if ctx.message.author.id not in [374061361606688788,777612548152229888, 351617185170325515]:
-            await ctx.send('В переработке~')
-            return
-
         user = ctx.message.author.id
         try: pageStart = int(ctx.message.content.split()[1])
         except: pageStart = 1

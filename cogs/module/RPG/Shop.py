@@ -4,7 +4,7 @@ from random import randint
 
 import asyncio
 import json
-from .REQ_database import DataBase
+from ..REQ_database import DataBase
 
 class Shop(commands.Cog):
     def __init__(self, bot:commands.Bot):

@@ -4,8 +4,8 @@ from random import randint
 import asyncio
 import json
 
-from .SystemCommandRPG import *
-from ..Rpg import RPG
+from .System import *
+from ...Rpg import RPG
 
 
 def rep(character:str, value:int):

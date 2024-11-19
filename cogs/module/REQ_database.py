@@ -168,7 +168,7 @@ class DataBase:
             return cur.fetchone()
     
     class Poke:
-        def __init__(self, user) -> None:
+        def __init__(self, user:int) -> None:
             self.user = user
 
         def add(self, value, column='STRIKE') -> bool:
@@ -182,8 +182,8 @@ class DataBase:
             else: return False
             conRPG.commit()
             return True
-        def update(self, value=0, time:bool=True) -> bool:
-            if time: curRPG.execute(f'UPDATE user_poke SET TIMESTAMP = {value} WHERE UID = {self.user}')
+        def update(self, value=0, time_bool:bool=True) -> bool:
+            if time_bool: curRPG.execute(f'UPDATE user_poke SET TIMESTAMP = {round(time.time())} + {value} WHERE UID = {self.user}')
             else: curRPG.execute(f'UPDATE user_poke SET STRIKE = {value} WHERE UID = {self.user}')
             conRPG.commit()
             return True

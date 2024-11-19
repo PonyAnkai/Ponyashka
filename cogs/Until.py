@@ -1,63 +1,14 @@
-from .module import REQ_database as Rdb
-
 import disnake
 from disnake.ext import commands
+
 import asyncio
 import time
-from datetime import date
+
+from .module import System as sys
+from .module import REQ_database as Rdb
+from .module import Views as View
 
 db = Rdb.DataBase
-#! Основное тело селектора лидерборда
-# тело самой команды, что вызывает данный селектор на 63 строке
-class DropDownMenuLeader(disnake.ui.StringSelect):
-    def __init__(self, map:map, user:int, time:float):
-        self.index = 0
-        self.map = map
-        self.user= user
-        self.time= time
-
-        # disnake.SelectOption(label='Аркады', value='arcade', description='Сортировка по самому большому винстрику')
-        options = [
-            disnake.SelectOption(label='Опыт', value='exp', description='Сортировка по свободному опыту'),
-            disnake.SelectOption(label='Валюта', value='money', description='Сортировка по валюте [1sl = 3200es, 1sh = 400es]'),
-            disnake.SelectOption(label='Характиристикам', value='stat', description='Топ 1, по каждой характиристике')
-            ]
-        super().__init__(
-            placeholder='Сортировка по...',
-            min_values=1,
-            max_values=1,
-            options=options
-            )
-        
-        if map is None:
-            raise 'Not have map: [components] [embed]'
-        
-        
-    async def callback(self, inter: disnake.MessageInteraction):
-        if self.user != inter.author.id:
-            await inter.response.send_message('Не вы вызвали таблицу', ephemeral=True)
-        if self.values[0] == 'exp':
-            embed= self.map[0]
-        elif self.values[0] == 'money':
-            embed= self.map[1]
-        # elif self.values[0] == 'arcade':
-        #     embed= self.map[2]
-        elif self.values[0] == 'stat':
-            embed= self.map[2]
-
-
-        if self.time < time.time():
-            embed = disnake.Embed(description='**Вышло время взаимодействия**', colour=disnake.Color.red())
-            await inter.response.edit_message(embed=embed, view=None)
-            return
-        else:
-            await inter.response.edit_message(embed=embed)
-
-# Прослушиватель выбора
-class DropDownViewLeader(disnake.ui.View):
-    def __init__(self, map: map, user:int, time:float):
-        super().__init__(timeout=None)
-        self.add_item(DropDownMenuLeader(map, user, time))
 
 #! Селектор для команды !help
 # Тело команды, вызов селектора на 212 строке
@@ -112,45 +63,6 @@ class DropDownViewHelp(disnake.ui.View):
         super().__init__(timeout=None)
         self.add_item(DropDownMenuHelp(time, map, user, ))
 
-#! Модалка для таймера
-class Modal(disnake.ui.Modal):
-        def __init__(self, comp):
-            self.comp = comp
-            components = [
-                disnake.ui.TextInput(
-                    label='Причина',
-                    placeholder='Напишите причину по которой я (поняшка) вас позову.',
-                    custom_id='reason',
-                    style=disnake.TextInputStyle.paragraph
-                    )
-                ]
-            super().__init__(
-                title='Создание напоминания',
-                custom_id='modal',
-                components=components
-                )
-        async def callback(self, inter: disnake.ModalInteraction):
-            y = {}
-            for key, item in inter.text_values.items():
-                y[key] = item
-            await inter.response.send_message(f'Я вас позову!')
-            await Timer(user_id= self.comp[0], times=self.comp[1], bot= self.comp[2], message_context=y['reason'], channel=self.comp[3]).start()
-
-#! Таймер
-class Timer:
-    def __init__(self, user_id, times, channel, bot, message_context):
-        self.message_context = message_context
-        self.channel = channel
-        self.user_id = user_id
-        self.time= times
-        self.bot= bot
-
-    async def start(self):
-        await asyncio.sleep(self.time)
-        embed= disnake.Embed(description=self.message_context)
-        await self.bot.get_channel(self.channel).send(f'<@{self.user_id}> я вас зову, по вашей просьбе!', embed=embed)
-
-
 
 class Until(commands.Cog):
     def __init__(self, bot=commands.Bot):
@@ -158,6 +70,10 @@ class Until(commands.Cog):
     
     @commands.command(name='leaders', aliases=['lead', 'лидеры', 'топ'])
     async def leaders(self, ctx):
+
+        if ctx.guild is None:
+            await ctx.send(embed=disnake.Embed(description='**Доступно, только на сервере.**'))
+            return
 
         user = ctx.message.author.id
         usersE = db.Info().takeFromRPG(table='user_main_info')
@@ -287,165 +203,60 @@ class Until(commands.Cog):
         # embed_win
         # Список таблиц
         maps = [embed_exp, embed_money, embed_rpg]
-        view = DropDownViewLeader(map=maps, user=user, time=time.time()+180)
+        view = View.DropDownViewLeader(map=maps, user=user, time=time.time()+180)
         await ctx.send(embed=embed_exp, view=view)
     
     # TODO: on when got ready a litle RPG content 
-    @commands.command(name='_') #aliases=['хелп', 'помощь', 'команды']
-    async def help(self, ctx):
-        
-        user = ctx.message.author.id
+    @commands.command(name='help', aliases=['Help', 'помощь', 'Помощь', 'хелп', 'Хелп']) #aliases=['хелп', 'помощь', 'команды']
+    async def helpedUser(self, ctx, info=None):
 
-        #! Общая информация
-        embed_main = disnake.Embed(
+        def embedBase():
+            embed = disnake.Embed(
             title='Общая информация',
-            description=
-'''
-```Данный бот создан пользователем @anki_ponyash(Поняшь) при поддержке @ksldi(Симба), @lesnyaa(Лесник) и многим другим пользователями```
-```Он предназначен для единоличного использования сервером: "Зарато"```
+            description='''
+Для дополнительной информации о каждой команде по отдельности используйте: `!help <название>` **->** `(!help work)` либоже после команды указать `?` **->** `(!work ?)`. Если что-то сильно не понятно, спрашивайте у администратора - Поня.
 
-# Данный бот имеет:
-1. **Экономическую систему** 
-Данная система позволяет покупать разные диковинные вещи на сервере
-будь-то роль, право или проходка. Возможно будет нечто экслюзивное.
-Валюта, что является мерилом чата — ChatPoint (ChP)
+<:SoundGood:1306072180693401690> **Общие команды:**
+`leaders` `avatar` `rand` `gif` `russianRollete` `coin`
 
-2. **Систему RPG** 
-Во многом система завязана на лоре и многих знаковых моментах сервера.
-Данная система является основной, где происходят интересности для самих игроков.
-Во многом она является отстраненной от основной атмосферы сервера, но не полностью и возможно
-Понь ошибается и это станет частью самого сервера. Мерилом всего.
-
-3. **Разные утилиты**
-Данные функции не сильно завязаны на каких-либо особенностях
-и просто существуют, либо по просьбе членов сервера, либо просто по желанию Поня.
-
-4. **Администрирование**
-Функции для администраторского состава, в частности двух людей сервера: Мага и Поня.
-(Понь все ищёт себе помощника, но увы пока достойного человека нет)
-
-||Список команд будет пополняться||
-Для просмотра команд, используйте выпадающий список снизу.
-'''
+<:ohYa:1306072065543114752> **Команды понимонов**:
+`wallet` `work` `lotery` `craft` `uncraft` `sellpoke` `setpokework` `lookdivpoke` `look` `lookbag` `fightpoke` `setfightgroup` `tradepoke` `bidding` `support` `upgradepoke` `remelting` `marketpoke`
+            ''',
+            colour=disnake.Color.yellow()
             )
-        #! Базовые команды
-        embed_eco = disnake.Embed(
-            title='Экономика',
-            description=
-'''
-# Общий список команд, для экономики
+            embed.set_footer(text='Поняшь ©2024 Все права запоняшены.', icon_url='https://media.discordapp.net/attachments/1306066774860763146/1306067476601245716/7_-_17.08.2024.png?ex=6735519f&is=6734001f&hm=fbaacb4ca01e0a09222dbdea3d5790d464c100b5ab14724e73a8f48cb9ac4ac5&=&format=webp&quality=lossless&width=290&height=350')
+            return ctx.send(embed=embed)
 
-**``1. [leaders] | (lead, лидеры, топ)``**
-``` Без параметров ```
-Список 10-ти пользователей, что лидируют по опыту (ChatPoint), что зарабатываются в процессе общения.
-Также там есть и другие топы пользователей: Валюта, Аркады, RPG-характиристики.
-
-**``2. [work] | (w, работа)``**
-``` Без параметров ```
-Обычная команда, что позволяет заработать немного базовой валюты сервера.
-Будет возможность становиться лучше по професии, однако сильно много тут не заработать,
-Если не становиться лучше с каждым разом.
-
-**``3. [crafts] | (cfs, крафтдуш)``**
-``` ~cfs <количество из скольки крафт> ```
-Способ предобразования душ в более сильные концентраты.
-Требуется для получения осколком и душ. Не позволяет получать кристальные души.
-s - в конце означает «души (soul)»
-'''
-            )
-        #! Админ-команды
-        embed_RPG = disnake.Embed(
-            title='RPG-команды',
-                        description=
-'''
-# Общий список RPG-команд
-
-**``1. [stat] | (statistic, стат, статус, профиль)``**
-``` Без параметров ```
-Показывает некоторую информацию пользователя.
-Часто применяется, для отслеживания денег, предметов или просто уровня с опытом.
-
-**``2. [russianRollete] | (rr, рулетка, rollete)``**
-``` ~rr <Количество пуль 1-6> ```
-Решив сыграть в эту игру, ожидайте последствий.
-Игра проста, просто нажимайте на курок и получите немного денег.
-Однако проигрышь сделает на один труп больше в этом мире.
-(Не полный функционал)
-'''
-            )
-        #! RPG команды
-        embed_admin = disnake.Embed(
-            title='Администрирование',
-                        description=
-'''
-# Общий список команд для администраторов
-
-**``1. [addChannel] | (ответы, addch)``**
-``` ~addch <упоминание канала> ```
-Команда для добавления каналов Поняшке, в которых она будет случайно разговаривать.
-
-**``2. [RChannel] | (нуль, rc)_``**
-``` Без параметров ```
-Команда для проверки разрешенных каналов для случайных разговоров Поняшки.
-
-**``3. [exp] | (—)``**
-``` ~exp <+/- Число> <Упоминание пользователя>```
-Изменить количество ChatPoint пользователя.
-Используется в каких-то особых случаях, как например если ты не Понь.
-
-**``4. [gifadd] | (добгиф, новгиф)``**
-``` ~gifadd <приложение сыллки на гифку от дискорда> ```
-Простое добавление новых гифок в поняшку.
-Позже будет переработана, так как сложно отлавливать рабочие гифки, или гифки что не вливаются.
-
-'''
-            )
-        #! Другое
-        embed_other = disnake.Embed(
-            title='Утилиты',
-                        description=
-'''
-# Общий список команд-утилит
-
-**``1. [rand] | (рандом, ранд, случ)``**
-``` ~rand <от какого число> <до какого числа> ```
-Случайная генерация числа от и до определнного порога.
-Если указано одно число, то генерация от 0 и до указанного числа.
-
-**``2. [coin] | (монетка, монеточка, коин)``**
-``` ~coin <орёл/решка> ```
-Простая игра в орёл или решку с Поняшкой, ничего интересного.
-Количество побед подряд сохраняются в профиле.
-
-**``3. [gif] | (гиф, гифка)``**
-``` Без параметров ```
-Поняшка отправит случайную гифку в чат.
-Что попадётся, совершенно не ясно, и будет ли эта гифка уместа.
-
-'''
-            )
-
-
-        maps = [embed_main, embed_eco, embed_RPG, embed_admin, embed_other]
-        view = DropDownViewHelp(map=maps, user=user, time=time.time()+1200)
-        await ctx.send(embed=embed_main, view=view)
-
-
-    # @commands.slash_command(name='timer', description='Простая напоминалка. Указывать в минутах.', guild_ids=[1199488197885968515, 958063150144577558])
-    # async def timer(self, inter: disnake.AppCmdInter, time:int):
-        # if not inter.channel.id in [1205649033125830706, 992673176448417792]:
-        #     return
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter == ctx.message.content.split(' ')[0]:
+            await embedBase()
+            return
         
-        # timeValue= 60
-        # try:
-        #     timeValue = time * 60
-        # except:
-        #     pass
-        # embed= disnake.Embed(title=f'Через {timeValue} я вас позову.')
-        # user_id = inter.author.id
+        if info:
+            aboutSystem = sys.loadJson(path='../PonyashkaDiscord/config/help.json')
+            helped = aboutSystem[userEnter.lower()]
+            embed = disnake.Embed(
+                title=f'{helped['status']}',
+                description=helped['text']
+            )
+            await ctx.send(embed=embed) 
+            return
 
-        # comp = [user_id, timeValue, self.bot, inter.channel.id]
-        # await inter.response.send_modal(modal=Modal(comp=comp))
+        aboutSystem = sys.loadJson(path='../PonyashkaDiscord/config/help.json')
+
+        try:
+            helped = aboutSystem[userEnter.lower()]
+        except:
+            embed = disnake.Embed(description='**Возможно вы ошиблись в названии, или таковой механики или команды нет.**', colour=disnake.Color.dark_red())
+            await ctx.send(embed=embed)
+            return
+
+        embed = disnake.Embed(
+            title=f'{helped['status']}',
+            description=helped['text']
+            )
+        await ctx.send(embed=embed) 
 
     @commands.command(name='avatar',  aliases=['ava', 'a', 'ава', 'аватар'])
     async def avatar(self, ctx):
@@ -470,6 +281,7 @@ s - в конце означает «души (soul)»
             file.close()
 
         await ctx.send(f'/ all ok')
+
 
     @commands.command(name='clearconsole', aliases=['cls'])
     async def clearConsole(self, ctx):

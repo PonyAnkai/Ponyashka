@@ -166,7 +166,6 @@ class Testing(commands.Cog):
         # except:
         #     await ctx.send('Ой, что-то пошло не так, вы точно написали такой формат команды? \n``~swap <ID> <параметр> <значение>``\n\nТакже меняйте число на число, а слова на слова!')
 
-
     @commands.command()
     async def emb(self, ctx):
         if ctx.message.guild.id != 1199488197885968515:
@@ -470,6 +469,21 @@ class Testing(commands.Cog):
             embed.set_image(file=disnake.File(f'../PonyashkaDiscord/content/icon/slide_show/{item}'))
             await message.edit(embed=embed)
             sleep(5)
+
+    @commands.command(name='neuro')
+    async def neuro(self, ctx):
+        '''Идея о том, что бы сделать обращение к поняшке. Человек написал о пони и она тут как тут, даже на что-то ответить может. Только сложность в том, что потребуется реализовать систему адаптивной нейронки, что будет понимать контекст сообщения, даже с ошибками, и выдавать нужный ответ.'''
+        '''Учесть прикол, что при Timeout выскакивает ошибка, которую следует обработать, дабы в чат не сралось'''
+        channel = ctx.message.channel
+        def check(e):
+            return e.content == 'поняшка' and e.channel == channel
+        msg = await self.bot.wait_for('message', check=check, timeout=15)
+        await channel.send(f'Да-да?')
+
+    @commands.command(name='emoji')
+    async def emoji(self, ctx: disnake.ext):
+
+        await ctx.send('<:huh:1300665543879168090>')
 
 def setup(bot:commands.Bot):
     bot.add_cog(Testing(bot))

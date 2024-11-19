@@ -6,7 +6,7 @@ import asyncio
 import json
 import time
 
-from .REQ_database import DataBase
+from ..REQ_database import DataBase
 from random import choices, choice, randrange
 
 db = DataBase
