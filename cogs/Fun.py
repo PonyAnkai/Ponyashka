@@ -89,7 +89,7 @@ class Fun(commands.Cog):
             file.writelines(f'{gifs[i]}\n')
         file.close()
 
-    @commands.command(name='russianRollete', aliases=['rr', 'рулетка', 'rollete'])
+    @commands.command(name='russianrollete', aliases=['rr', 'рулетка', 'rollete'])
     async def russianRollete(self, ctx):
 
         user = ctx.message.author.id

@@ -1,16 +1,10 @@
 
-
+# От скорости больше х2, может появилтся двойной удар
+# От медлительности больше 0.5х может появится заряженный удар, или сверх-удар судьбы, при 0.25х
 chancedDropMoves = {
     'atk':100,
-    'deff':80,
-    'sheal':80
-    }
-
-
-listMoves = {
-    'atk':lambda self, attack, target, who: self.attack(attack, target, who),
-    'deff':lambda self, attack, target, who: self.deffence(attack, target, who),
-    'sheal':lambda self, target: self.heal(target)
+    'deff':100,
+    'sheal':100
     }
 
 
@@ -32,4 +26,4 @@ async def decriptedCommandLocale(command) -> str:
     if command == 'deff':
         return f'{movesToRu(command)} (Снижение входящего урона)'
     if command == 'sheal':
-        return f'{movesToRu(command)} (Лечение 10% здоровья)'
+        return f'{movesToRu(command)} (Лечение здоровья)'

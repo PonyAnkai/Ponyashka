@@ -71,6 +71,13 @@ class Until(commands.Cog):
     @commands.command(name='leaders', aliases=['lead', 'лидеры', 'топ'])
     async def leaders(self, ctx):
 
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='leaders')
+            return
+        else: del userEnter
+
         if ctx.guild is None:
             await ctx.send(embed=disnake.Embed(description='**Доступно, только на сервере.**'))
             return
@@ -99,7 +106,9 @@ class Until(commands.Cog):
                 if user_ctx.nick: name = user_ctx.nick
                 else: name = user_ctx.name
             except:
-                name = db.Info(user_id=item[0]).takeFromRPG(table='user_ds_info')[1]
+                name = db.Info(user_id=item[0]).takeFromRPG(table='user_ds_info')
+                if not name: continue
+                else: name = name[1]
             EmbedText += f'**``{index + 1}``** **{name}**\n|ㅤУровень: {item[1][1]} ``({item[1][0]} exp)``\n'
             if index == 9:
                 break
@@ -217,10 +226,10 @@ class Until(commands.Cog):
 Для дополнительной информации о каждой команде по отдельности используйте: `!help <название>` **->** `(!help work)` либоже после команды указать `?` **->** `(!work ?)`. Если что-то сильно не понятно, спрашивайте у администратора - Поня.
 
 <:SoundGood:1306072180693401690> **Общие команды:**
-`leaders` `avatar` `rand` `gif` `russianRollete` `coin`
+`leaders` `avatar` `rand` `gif` `russianrollete` `coin`
 
 <:ohYa:1306072065543114752> **Команды понимонов**:
-`wallet` `work` `lotery` `craft` `uncraft` `sellpoke` `setpokework` `lookdivpoke` `look` `lookbag` `fightpoke` `setfightgroup` `tradepoke` `bidding` `support` `upgradepoke` `remelting` `marketpoke`
+`wallet` `work` `lotery` `craft` `uncraft` `sellpoke` `setpokework` `lookdivpoke` `look` `lookbag` `fightpoke` `setfightgroup` `tradepoke` `support` `upgradepoke` `remelting` `marketpoke` `memorysoul`
             ''',
             colour=disnake.Color.yellow()
             )
@@ -235,7 +244,8 @@ class Until(commands.Cog):
         
         if info:
             aboutSystem = sys.loadJson(path='../PonyashkaDiscord/config/help.json')
-            helped = aboutSystem[userEnter.lower()]
+            try: helped = aboutSystem[info.lower()]
+            except: return await ctx.send(embed=disnake.Embed(description='**Об этом у меня нет информации.**'))
             embed = disnake.Embed(
                 title=f'{helped['status']}',
                 description=helped['text']
@@ -248,7 +258,7 @@ class Until(commands.Cog):
         try:
             helped = aboutSystem[userEnter.lower()]
         except:
-            embed = disnake.Embed(description='**Возможно вы ошиблись в названии, или таковой механики или команды нет.**', colour=disnake.Color.dark_red())
+            embed = disnake.Embed(description='**О таком я не знаю.**', colour=disnake.Color.dark_red())
             await ctx.send(embed=embed)
             return
 
@@ -258,9 +268,16 @@ class Until(commands.Cog):
             )
         await ctx.send(embed=embed) 
 
-    @commands.command(name='avatar',  aliases=['ava', 'a', 'ава', 'аватар'])
+    @commands.command(name='avatar',  aliases=['a', 'а', 'ава', 'аватар'])
     async def avatar(self, ctx):
         
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='avatar')
+            return
+        else: del userEnter
+
         if ctx.message.raw_mentions:
             mentioned = ctx.guild.get_member(ctx.message.raw_mentions[0])
             embed = disnake.Embed(title=f'Аватар пользователя: {mentioned.name}')

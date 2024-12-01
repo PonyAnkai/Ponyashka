@@ -108,7 +108,6 @@ class Message(commands.Cog):
                     elif level_config[item] in user_role and not range_item_lvl_bool[index]:
                         await message.author.remove_roles(self.bot.get_guild(message.guild.id).get_role(level_config[item]))
                 except:
-                    # BUG: Отладить этот ебучий баг, и найти причину его появления, а то я в душе не ебу хули оно мозги делает
                     print('\t\t< ↓ Error ↓ >\t\t')
                     print(f'authorError={message.author.name}')
                     print(f'level_config[{item}]({type(level_config[item])}) = {level_config[item]}')

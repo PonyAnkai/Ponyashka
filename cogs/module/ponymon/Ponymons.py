@@ -7,6 +7,7 @@ import yaml
 import time
 import copy
 import sqlite3
+import random
 
 from ..REQ_database import DataBase
 from random import choices, choice, randrange
@@ -16,11 +17,30 @@ from ..RPG.System import userData
 
 db = DataBase
 
+async def checkHavePoke(user, ids, seq=None) -> bool:
+    userBag = await giveUserBag(user)
+    userWork, _ = await getWorkPokemon(user, False)
+    userFighPet = await takeFightGroup(user)
+
+
+    if ids not in userBag:
+        for item in userFighPet:
+            if str(userFighPet[item]).startswith(ids): 
+                await saveFightGroup(None, user, item[-1])
+        return True
+    if seq not in userBag[ids]:
+        for item in userFighPet:
+            if str(userFighPet[item]).endswith(ids): 
+                userFighPet[item] = None
+                await saveFightGroup(None, user, item[-1])
+        return True
+    return False
 
 async def setFightStatus(uid, status:bool):
     con = sqlite3.connect('../PonyashkaDiscord/_rpg.db')
     cur = con.cursor()
     cur.execute(f'UPDATE user_poke SET INFIGHT = {status} WHERE UID = {uid}')
+    con.commit()
 
 async def checkInFightStatus(uid):
     con = sqlite3.connect('../PonyashkaDiscord/_rpg.db')
@@ -29,6 +49,11 @@ async def checkInFightStatus(uid):
     cur.execute(f'SELECT INFIGHT FROM user_poke WHERE UID = {uid}')
     return bool(int(cur.fetchone()[0]))
 
+async def closeEmbedMessageAfter_Interaction(message, responce, time:int):
+    await asyncio.sleep(time)
+    embed = disnake.Embed(description='```Окно закрыто системой.```')
+    await responce.edit_message(message_id=message.id, components=None, embed=embed)
+    return True
 async def closeEmbedMessageAfter(message, time:int):
     await asyncio.sleep(time)
     embed = disnake.Embed(description='```Окно закрыто системой.```')
@@ -43,20 +68,20 @@ def associateOrderRank(rank, reverse:bool=False) -> int|str:
     return order[rank]
 
 #? Main function a interaction with lotery system
-async def checkButtonsLotery(essence, priceTiket) -> list:
+async def checkButtonsLotery(countRoll) -> list:
     ''' This function return disnake.ui.Button(label='5|10')'''
     buttons = []
 
-    if abs(essence) // priceTiket != 0: buttons.append(disnake.ui.Button(style=disnake.ButtonStyle.gray, label='1', custom_id='lotery_1'))
+    if countRoll != 0: buttons.append(disnake.ui.Button(style=disnake.ButtonStyle.gray, label='1', custom_id='lotery_1'))
     else: buttons.append(disnake.ui.Button(style=disnake.ButtonStyle.gray, label='1', custom_id='lotery_1', disabled=True))
 
-    if essence // priceTiket >= 5: buttons.append(disnake.ui.Button(style=disnake.ButtonStyle.gray, label='5',custom_id='lotery_5'))
+    if countRoll >= 5: buttons.append(disnake.ui.Button(style=disnake.ButtonStyle.gray, label='5',custom_id='lotery_5'))
     else:buttons.append(disnake.ui.Button(style=disnake.ButtonStyle.gray, label='5',custom_id='lotery_5', disabled=True))
 
-    if essence // priceTiket >= 10: buttons.append(disnake.ui.Button(style=disnake.ButtonStyle.gray, label='10', custom_id='lotery_10'))
+    if countRoll >= 10: buttons.append(disnake.ui.Button(style=disnake.ButtonStyle.gray, label='10', custom_id='lotery_10'))
     else: buttons.append(disnake.ui.Button(style=disnake.ButtonStyle.gray, label='10', custom_id='lotery_10', disabled=True))
 
-    if essence // priceTiket >= 50: buttons.append(disnake.ui.Button(style=disnake.ButtonStyle.gray, label='50', custom_id='lotery_50'))
+    if countRoll >= 50: buttons.append(disnake.ui.Button(style=disnake.ButtonStyle.gray, label='50', custom_id='lotery_50'))
     else: buttons.append(disnake.ui.Button(style=disnake.ButtonStyle.gray, label='50', custom_id='lotery_50', disabled=True))
 
     return buttons
@@ -69,14 +94,23 @@ async def rareColor(Rank) -> disnake.Colour:
     if Rank == 'D': return disnake.Colour.green()
     if Rank == 'E': return disnake.Colour.default()
     if Rank == 'F': return disnake.Colour.dark_gray()
-async def RollLotery(user, priceTiket=100, count:int = 1, sys:bool=False) -> map:
+async def RollLotery(user, freeRoll: int = 0, priceTiket=100, count:int = 1, sys:bool=False) -> map:
     if not 1 <= count <= 100: raise Exception('range count can be 1 <= count <= 100')
 
     if not sys:
-        value = count*priceTiket
         
-        if not DataBase.Money(user=user, value=value).sub():
-            raise Exception('Где-то не сработали блокировки')
+        if int(freeRoll) >= int(count):
+            db.Poke(user).sub(value=count, column='TIKET')
+
+        elif int(freeRoll) == 0:
+            value = count*priceTiket
+            db.Money(user=user, value=value).sub()
+
+        else:
+            value = (count - freeRoll) * priceTiket
+            db.Poke(user).sub(value=freeRoll, column='TIKET')
+            db.Money(user=user, value=value).sub()
+
 
     with open('../PonyashkaDiscord/content/lotery/lowLotery.json', encoding='UTF-8') as file:
             load = json.load(file)
@@ -136,6 +170,7 @@ async def RollLotery(user, priceTiket=100, count:int = 1, sys:bool=False) -> map
 
             loot['price'] = randrange(loot['price'][0], loot['price'][1], 10)
             loot['income'] = randrange(loot['income'][0], loot['income'][1], 5)
+            loot['countMemorySoul'] = 0
 
             for item in listTrait:
                 if loot['trait'][item] is None: del loot['trait'][item]
@@ -175,6 +210,10 @@ async def RollLotery(user, priceTiket=100, count:int = 1, sys:bool=False) -> map
 
         sellIncome = 0
 
+        loot['price'] = randrange(loot['price'][0], loot['price'][1], 10)
+        loot['income'] = randrange(loot['income'][0], loot['income'][1], 5)
+        loot['countMemorySoul'] = 0
+
         for item in listTrait:
             if loot['trait'][item] is None: del loot['trait'][item]
 
@@ -210,9 +249,14 @@ async def RollLotery(user, priceTiket=100, count:int = 1, sys:bool=False) -> map
     else:
         compliment = choice(compliments['mass'])
     
+    priceTiket = await GetTiketPrice(user)
+    freeRoll = db.Poke(user).takeAll()[4]
     user = await userData(uid=user)
     essence = user['money']['ESSENCE']
-    buttons = await checkButtonsLotery(essence=essence, priceTiket=priceTiket)
+
+    countToRoll = freeRoll + (essence // priceTiket)
+
+    buttons = await checkButtonsLotery(countRoll=countToRoll)
     return {"loot":lootEnd, "compliment":compliment, "buttons":buttons, "sellIncome":sellIncome}
 def savePokemon(loot, uid:int) -> None:
     '''Save without trade, for trade use other command «saveAfterTradePoke()»'''
@@ -246,7 +290,8 @@ def savePokemon(loot, uid:int) -> None:
                 "healpoint_now":item[1]['params']['healpoint'],
                 
                 "supports":0,
-                "supports_percent_up":0
+                "supports_percent_up":0,
+                "countMemorySoul":item[1]['countMemorySoul']
                 },
             "curr":{
                 "price":item[1]['price'],
@@ -350,7 +395,7 @@ async def findMap_PokemonInUserBag_LikeName(pokemonName:str, user) -> bool:
         if pokemonName.lower() == randomSelect['name'].lower(): return True
 
     return False
-async def findMap_PokemonInDB_LikeID(ID:str):
+async def findMap_PokemonInDB_LikeID(ID:str) -> map:
     # ID 
     with open('../PonyashkaDiscord/content/lotery/lowLotery.json', encoding='UTF-8') as file:
         load = json.load(file)
@@ -520,7 +565,7 @@ async def GetTiketPrice(user) -> int:
     if userLVL <= 0: userLVL = 0
 
     lenBag = await getLenUserBag(userBag=userBag)
-    return 10000 + (100 * (userLVL//2)) + (100 * (userCountRoll//100)) + (100 * (lenBag//4))
+    return 10000 + (100 * (userLVL//2)) + (100 * (userCountRoll//100)) + (100 * (lenBag//10))
 
 async def takeFightGroup(user:int):
     try:
@@ -579,19 +624,44 @@ async def endSellPokeAfterSelect(pokemon_ids:str, user, message):
 
     pokemon = userBag[ids][seq]
     
-    text = f'✔ **Покемон [{pokemon['name']}] был продан за `{round(pokemon['curr']['price']*0.75)}`es** \n'
+    text = f'✔ **Понимон [{pokemon['name']}] был продан за `{round(pokemon['curr']['price']*0.75)}`es** \n'
 
     embed = disnake.Embed(
             description=text
-            ).set_footer(text='Покемон продаётся за 75% от стоимости')
+            ).set_footer(text='Понимон продаётся за 75% от стоимости')
     
     import copy 
     price = copy.copy(userBag[ids][seq]['curr']['price'])
     del userBag[ids][seq]
-    if len(userBag[ids]) == 1: del userBag[ids]
+    if len(userBag[ids]) == 0: del userBag[ids]
 
     db.Money(user=user, value=round(price*0.75)).add()
     del price
+
+    DelicateInjectWorkFile(user=user, pokemon=pokemon)
+    await saveBagUserFile(userBag, user)
+    await message.edit(embed=embed)
+async def endRemPokeAfterSelect(pokemon_ids:str, user, message):
+
+    userBag = await giveUserBag(user=user)
+    ids, seq = pokemon_ids.split('-')
+
+    pokemon = userBag[ids][seq]
+
+    value = pokemon['other_param']['essence_drop']
+    valueChanceDrop = (1 + value*1.4)/(1_000_000 + value*0.8 + random.randint(round(value*0.7), round(value*1.3)))
+    rem = random.random() < valueChanceDrop
+    
+    text = f'✔ **Понимон [{pokemon['name']}] был переплавлен, {'оказалось зря.' if rem else f'в `1` штуку духовной памяти '}** \n'
+
+    embed = disnake.Embed(
+            description=text
+            ).set_footer(text=f'{'Даже рынок рабов, нет так ужасен!' if random.random() < 0.05 else ''}')
+
+    if rem: db.Poke(user=user).add(value=1, column='POKE_ESSENCE')
+    
+    del userBag[ids][seq]
+    if len(userBag[ids]) == 0: del userBag[ids]
 
     DelicateInjectWorkFile(user=user, pokemon=pokemon)
     await saveBagUserFile(userBag, user)
@@ -605,29 +675,40 @@ async def confirmActions(user1, user2, rankCOM, message):
     userBag2 = await giveUserBag(user2)
 
     ids, seq = rankCOM.split('-')
-    if ids in userBag2:
+    if ids in list(userBag2.keys()):
+        if list(userBag2[ids].keys()) == 20: return await message.edit(embed=disnake.Embed(description=f'**Похоже у данного пользователя нет места для данного типа понимонов.**'))
+
         num = 1
         keysList = list(userBag2[ids].keys())
         while True:
-            if num not in keysList: 
+            if str(num) not in keysList: 
                 break
             num += 1
         
         pokesEntrade = copy.deepcopy(userBag1[ids][seq])
         del userBag1[ids][seq]
+        if len(userBag1[ids]) == 0: del userBag1[ids]
+
+        pokesEntrade['owner'] = int(user2)
+        pokesEntrade['holder'].append(int(user2))
+        pokesEntrade['innerID'] = str(f'{ids}-{num}')
 
         userBag2[ids][num] = pokesEntrade
 
         hardSaveBag(user=user1, file=userBag1)
         hardSaveBag(user=user2, file=userBag2)
 
-        embed= disnake.Embed(description=f'**Вы передали пользователю <@{user2}> покемона.**')
+        embed= disnake.Embed(description=f'**Вы передали пользователю <@{user2}> понимона.**')
         await message.edit(embed=embed)
     else:
         pokesEntrade = copy.deepcopy(userBag1[ids][seq])
-        pokesEntrade['owner'] = user2
-        pokesEntrade['holder'].append(user2)
+
+        pokesEntrade['owner'] = int(user2)
+        pokesEntrade['holder'].append(int(user2))
+        pokesEntrade['innerID'] = str(f'{ids}-1')
+        
         del userBag1[ids][seq]
+        if len(userBag1[ids]) == 0: del userBag1[ids]
 
         userBag2[f'{ids}'] = {
                 '1':pokesEntrade
@@ -636,7 +717,7 @@ async def confirmActions(user1, user2, rankCOM, message):
         hardSaveBag(user=user1, file=userBag1)
         hardSaveBag(user=user2, file=userBag2)
 
-        embed= disnake.Embed(description=f'**Вы передали пользователю <@{user2}> покемона.**')
+        embed= disnake.Embed(description=f'**Вы передали пользователю <@{user2}> понимона.**')
         await message.edit(embed=embed)
 
 # Just locale params and stats
@@ -649,11 +730,11 @@ async def AllockatePokemons(name:str) -> str:
         'mole':'Кротовик', 'lucky':'Удачливость', 
         'perk_slot':'Слотов навыков'}
     listProperty = {
-        'attack':'Урон', 'healpoint':'Здоровье', 
-        'armor':'Броня', 'speed':'Скорость', 
-        'evasion':'Уклонение', 'regen':'Регенерация'}
+        'attack':'🔪 Урон', 'healpoint':'💖 Здоровье', 
+        'armor':'🛡 Броня', 'speed':'🍃 Скорость', 
+        'evasion':'🦋 Уклонение', 'regen':'💞 Регенерация'}
     listCurr = {
-        'price':'Цена', 'income':'Доход', 'power':'Усиление работы'
+        'price':'💵 Цена', 'income':'💹 Доход', 'power':'🔥 Усиление работы'
         }
 
     for item in listProperty:
@@ -713,6 +794,19 @@ def rankedBoost(rank) -> list:
         'S':[2.0, 1.10]
         }
     return rankedBoostMap[rank]
+def rrNeedSUP(rank:str) -> int:
+    rrUpedMap = {
+        'F':10,
+        'E':12,
+        'D':14,
+        'C':16,
+        'B':18,
+        'A':20,
+        'S':25,
+        'EX':50,
+        '?':10
+        }
+    return rrUpedMap[rank]
 def rrUped(rank:str):
     rrUpedMap = {
         'F':'E',
@@ -720,19 +814,16 @@ def rrUped(rank:str):
         'D':'C',
         'C':'B',
         'B':'A',
-        'A':'S'
+        'A':'S',
+        'S':'S'
         }
-    return rrUpedMap[rank]
+    if rank == 'EX': return 'EX'
+    return rrUpedMap[rank] 
 async def updateMessage(message, view):
-    await message.edit(embed=disnake.Embed(description='### Какого покемона расчитаете как расходник?', colour=disnake.Color.dark_blue()), view=view)
+    await message.edit(embed=disnake.Embed(description='### Какого понимона расчитаете как расходник?', colour=disnake.Color.dark_blue()), view=view)
 def mapSup(supCount):
-    mapSup = {
-            '1':0.25, '2':0.28, '3':0.31,
-            '4':0.35, '5':0.39, '6':0.42,
-            '7':0.48, '8':0.52, '9':0.60,
-            '0':0.21
-            }
-    return mapSup[supCount]
+    if int(supCount) < 2: return 0.05
+    return round(0.05 + ((int(supCount) // 2) * 0.05), 2)
 async def EndSopportSelect(message, user, ids:list):
 
     userBag = await giveUserBag(user=user)
@@ -740,7 +831,7 @@ async def EndSopportSelect(message, user, ids:list):
     uids, useq = ids[0].split('-')
     upPoke = userBag[uids][useq]
     mapedSuped = upPoke['other_param']['supports']
-    upRank = True if int(mapedSuped)+1 == 10 else False
+    upRank = True if int(mapedSuped)+1 == rrNeedSUP(upPoke['rank']) else False
 
     dids, dseq = ids[1].split('-')
     diePoke = userBag[dids][dseq]
@@ -748,16 +839,16 @@ async def EndSopportSelect(message, user, ids:list):
     roll = choice(['params', 'curr'])
     mapRoll = {
         'params':{
-            'attack':f'-> Атака [{upPoke['params']['attack']} -> {upPoke['params']['attack'] + round(diePoke['params']['attack'] * mapSup(str(mapedSuped)))}]',
-            'healpoint':f'-> Здоровье [{upPoke['params']['healpoint']} -> {upPoke['params']['healpoint'] + round(diePoke['params']['healpoint'] * mapSup(str(mapedSuped)))}]',
-            'armor':f'-> Броня [{upPoke['params']['armor']} -> {(upPoke['params']['armor'] + round(diePoke['params']['armor'] * mapSup(str(mapedSuped)), 2)):.3f}]',
-            'evasion':f'-> Уклонение [{upPoke['params']['evasion']} -> {(upPoke['params']['evasion'] + round(diePoke['params']['evasion'] * mapSup(str(mapedSuped)), 2)):.3f}]',
-            'regen':f'-> Регенерация [{upPoke['params']['regen']} -> {upPoke['params']['regen'] + round(diePoke['params']['regen'] * mapSup(str(mapedSuped)))}]'
+            'attack':f'-> Атака [{upPoke['params']['attack']:.0f} -> {upPoke['params']['attack'] + round(diePoke['params']['attack'] * mapSup(str(mapedSuped))):.0f}]',
+            'healpoint':f'-> Здоровье [{upPoke['params']['healpoint']:.0f} -> {upPoke['params']['healpoint'] + round(diePoke['params']['healpoint'] * mapSup(str(mapedSuped))):.0f}]',
+            'armor':f'-> Броня [{upPoke['params']['armor']:.2f} -> {(upPoke['params']['armor'] + round(diePoke['params']['armor'] * mapSup(str(mapedSuped)), 2)):.2f}]',
+            'evasion':f'-> Уклонение [{upPoke['params']['evasion']:.2f} -> {(upPoke['params']['evasion'] + round(diePoke['params']['evasion'] * mapSup(str(mapedSuped)), 2)):.2f}]',
+            'regen':f'-> Регенерация [{upPoke['params']['regen']:.0f} -> {upPoke['params']['regen'] + round(diePoke['params']['regen'] * mapSup(str(mapedSuped))):.0f}]'
             },
         'curr':{
-            'price':f'-> Цена [{upPoke['curr']['price']} -> {upPoke['curr']['price'] + round(diePoke['curr']['price'] * mapSup(str(mapedSuped)))}]',
-            'income':f'-> Доход [{upPoke['curr']['income']} -> {upPoke['curr']['income'] + round(diePoke['curr']['income'] * mapSup(str(mapedSuped)))}]',
-            'power':f'-> Усиление дохода [{upPoke['curr']['power']} -> {upPoke['curr']['power'] + round(diePoke['curr']['power'] * mapSup(str(mapedSuped)), 2)}]'
+            'price':f'-> Цена [{upPoke['curr']['price']:.0f} -> {upPoke['curr']['price'] + round(diePoke['curr']['price'] * mapSup(str(mapedSuped))):.0f}]',
+            'income':f'-> Доход [{upPoke['curr']['income']:.0f} -> {upPoke['curr']['income'] + round(diePoke['curr']['income'] * mapSup(str(mapedSuped))):.0f}]',
+            'power':f'-> Усиление дохода [{upPoke['curr']['power']:.2f} -> {upPoke['curr']['power'] + round(diePoke['curr']['power'] * mapSup(str(mapedSuped)), 2):.2f}]'
             }
         }
     buttons = {
@@ -787,11 +878,11 @@ async def EndSopportSelect(message, user, ids:list):
             mapLocked[item] = True
             continue
 
-        if item == 'armor' and upPoke['params']['armor'] > 0.8:
+        if item == 'armor' and upPoke['params']['armor'] >= 0.8:
             textRoll += f'~~{mapRoll[roll][item]}~~\n'
             mapLocked[item] = True
             continue
-        if item == 'evasion' and upPoke['params']['evasion'] > 0.8:
+        if item == 'evasion' and upPoke['params']['evasion'] >= 0.8:
             textRoll += f'~~{mapRoll[roll][item]}~~\n'
             mapLocked[item] = True
             continue
@@ -846,7 +937,7 @@ async def EndSopportSelect(message, user, ids:list):
             return
 
 
-    await message.edit(embed=disnake.Embed(description=f'## Кубик брошен...\n`Выбор предоставлен.` \n**Вы можете улучшить [{'параметр' if roll == 'params' else 'свойство'}] у [{upPoke['name']}]:**\n{textRoll}\n').set_footer(text=f'Модификатор количества поддержек: {mapSup(str(mapedSuped)):.0%}{f'Данное усиление продвинет ранг покемона до {rrUped(upPoke['rank'])}' if upRank else ''}'), components=button)
+    await message.edit(embed=disnake.Embed(description=f'## Кубик брошен...\n`Выбор предоставлен.` \n**Вы можете улучшить [{'параметр' if roll == 'params' else 'свойство'}] у [{upPoke['name']}]:**\n{textRoll}\n').set_footer(text=f'Модификатор количества поддержек: {mapSup(str(mapedSuped)):.0%}\n{f'Данное усиление продвинет ранг понимона до {rrUped(upPoke['rank'])}' if upRank else ''}'), components=button)
 
 
 def chunks(lst, n):
@@ -880,7 +971,7 @@ def calculateCP(poke) -> int:
     
     # Блок с экономической мощности покемона
     curr = poke['curr']
-    block3 = ((curr['price'] * 0.1) + (curr['income'] * 0.5)) * curr['power'] 
+    block3 = ((int(curr['price']) * 0.1) + (curr['income'] * 0.5)) * curr['power'] 
     
     # Финалиция вычислений БМ
     endCalc = (block1 + block2 + block3) * rankBoost[poke['rank']]
@@ -898,9 +989,13 @@ def HPbar(percent) -> str|bool:
     count = math.ceil((percent * 100)//10)
     countNoHp = 10 - count
     return f'|{count*hp}{countNoHp*noHp}|'
-def HPupdate(poke, user=None):
+def HPupdate(poke, user):
     '''Обновление состояния здоровья'''
     if poke['other_param']['healpoint_now'] == poke['params']['healpoint']: return poke
+    if poke['other_param']['timestamp_hp'] == 0: 
+        poke['other_param']['timestamp_hp'] = round(time.time())
+        saveDelicateUserBag(poke, user)
+        return poke
 
     hp = poke['other_param']['healpoint_now']
     regen = int(poke['params']['regen'] * poke['trait']['greenhouse'])
@@ -909,9 +1004,9 @@ def HPupdate(poke, user=None):
     hp += round(times * regen)
     if int(hp) > int(poke['params']['healpoint']): poke['other_param']['healpoint_now'] = poke['params']['healpoint']
 
-    poke['other_param']['timestamp_hp'] = round(time.time())
+    if times != 0: poke['other_param']['timestamp_hp'] = round(time.time())
 
-    if user is not None: saveDelicateUserBag(poke, user)
+    saveDelicateUserBag(poke, user)
     return poke
 async def startFight(message, users, mulp):
     '''
@@ -945,6 +1040,7 @@ async def startFight(message, users, mulp):
         except:
             userPokes[f'slot{index}'] = None
 
+    # Если второй игрок не бот
     if not TemporalDatafightMap['p2']['bot']:
         for index, item in enumerate(TemporalDatafightMap['p2']['pokemons']):
             try:
@@ -962,14 +1058,16 @@ async def startFight(message, users, mulp):
     else:
 
         for index, item in enumerate(TemporalDatafightMap['p2']['pokemons']):
-            
-            poke = HPupdate(TemporalDatafightMap['p2']['pokemons'][item])
-            add = copy.deepcopy(poke)
+            try:
+                poke = HPupdate(TemporalDatafightMap['p2']['pokemons'][item], TemporalDatafightMap['p1']['idp'])
+                add = copy.deepcopy(poke)
 
-            add['moveCount'] = 0
-            add['modifacators'] = {}
+                add['moveCount'] = 0
+                add['modifacators'] = {}
 
-            opponentPokes[f'slot{index}'] = add
+                opponentPokes[f'slot{index}'] = add
+            except:
+                opponentPokes[f'slot{index}'] = None
 
 
     #? Подгрузка предметов игрока
@@ -1058,9 +1156,9 @@ async def startFight(message, users, mulp):
         ).set_footer(text='Шаг боя: 0')
 
     adress = (int(message.guild.id), int(message.channel.id), int(message.id))
-    
-    await setFightStatus(userID, status=False) #? Для первого игрока
-    await setFightStatus(opponentID, status=False) #? Для второго игрока
+
+    await setFightStatus(userID, status=True) #? Для первого игрока
+    await setFightStatus(opponentID, status=True) #? Для второго игрока
 
     install(users=users, players=players, adress=adress)
     await message.edit(embed=embed, components=buttons)
@@ -1102,6 +1200,15 @@ async def fightButtonsUpdateGetReady(message, p1:bool=None, p2:bool=None):
                 buttons[index].style = style
     await message.edit(components=buttons)
 
+async def openHellMarket() -> map:
+    with open('../PonyashkaDiscord/content/lotery/deadPokeMarket.json', encoding='UTF-8') as file:
+        deadMarket = json.load(file)
+    return deadMarket
+async def saveHellMarket_DeadFight(ponymon):
+    deadMarket = await openHellMarket()
+    deadMarket['dead_in_fight'].append(ponymon)
+    with open('../PonyashkaDiscord/content/lotery/deadPokeMarket.json', 'w', encoding='UTF-8') as file:
+        json.dump(deadMarket, file, indent=3, ensure_ascii=False)
 
 
 class PokeCom(commands.Cog):

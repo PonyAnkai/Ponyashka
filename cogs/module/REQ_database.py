@@ -177,7 +177,7 @@ class DataBase:
             return True
         def sub(self, value, column='STRIKE') -> bool:
             curRPG.execute(f'SELECT {column} FROM user_poke WHERE UID = {self.user}')
-            if curRPG.fetchone()[0] - self.value >= 0: 
+            if curRPG.fetchone()[0] - value >= 0: 
                 curRPG.execute(f'UPDATE user_poke SET {column} = {column} - {value} WHERE UID = {self.user}')
             else: return False
             conRPG.commit()

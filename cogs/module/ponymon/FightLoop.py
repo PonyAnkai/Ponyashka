@@ -8,6 +8,25 @@ from .data import *
 from ..REQ_database import DataBase
 from .Ponymons import *
 
+class Rank:
+    def __init__(self, user):
+        self.con = sqlite3.connect('../PonyashkaDiscord/_rpg.db')
+        self.cur = self.con.cursor()
+        self.user = user
+    
+    def upRank(self, value:int):
+        value = abs(value)
+        self.cur.execute(f'UPDATE user_poke SET REP = REP + {value} WHERE UID = {self.user}')
+        self.con.commit()
+    def downRank(self, value:int):
+        value = abs(value)
+        self.cur.execute(f'UPDATE user_poke SET REP = REP - {value} WHERE UID = {self.user}')
+        self.con.commit()
+    def getRank(self) -> int|None:
+        self.cur.execute(f'SELECT REP FROM user_poke WHERE UID = {self.user}')
+        try: return self.cur.fetchone()[0]
+        except: return None
+
 def install(users, players, adress) -> None:
 
     data = {
@@ -79,7 +98,8 @@ def addRecLog(file_adress, message):
     except: 
         with open(f'../PonyashkaDiscord/content/lotery/logs/{file_adress}.txt', 'w', encoding='utf-8') as file:
             file.write(message)
-
+def inFightCheckValid():
+    pass
 
 # Небольшие систематизирующие функции
 def HPbar(percent) -> str|bool:
@@ -351,7 +371,6 @@ class FightLoop(commands.Cog):
             return
 
         # Описание первого игрока
-        print(inter.author.id, objFile.p1['id'], userID)
         if int(inter.author.id) == int(objFile.p1['id']) and int(inter.author.id) == int(userID):
             objFile.p1["ready"] = not objFile.p1["ready"]
 
@@ -369,16 +388,13 @@ class FightLoop(commands.Cog):
         # Описание полной готовности двух игроков
         if  objFile.p1["ready"] and  objFile.p2["ready"]:
 
-            await objFile.nextStep(message=inter.message)
 
             objFile.p1["ready"] = not objFile.p1["ready"]
             if not objFile.p2['bot']: objFile.p2["ready"] = not objFile.p2["ready"]
 
+            await objFile.nextStep(message=inter.message)
+
             if not objFile.EndBattle: await fightButtonsUpdate(inter.message, p1=objFile.p1["ready"], p2=objFile.p2["ready"], bots=objFile.p2['bot'])
-
-            saveObjectFight(users=users, yamls=objFile.toSave())
-
-
 
         await inter.response.defer()
 
@@ -428,7 +444,7 @@ class FightLoop(commands.Cog):
                 try: moves += f'**{index+1}]|[ {userInteract['pokemons'][item]['name']} ]:**\n`| {await decriptedCommandLocale(userInteract['move'][item])}`\n\n'
                 except: moves += f'~~**{index+1} ]|[ None ]**~~\n\n'
 
-        text = f'```Выбранные действия покемонов```\n{moves}\n'
+        text = f'```Выбранные действия понимонов```\n{moves}\n'
 
         embed = disnake.Embed(description=text)
         if comm == 'CFB' or comm == 'MVBF-BACKSTEP':
@@ -690,7 +706,7 @@ class FightLoop(commands.Cog):
         # BUG: Перенести данную хуйню в другое место, так как реролится действия каждый раз. Это баг
         components = [disnake.SelectOption(label=f'Отменить', value=f'cannelSelectMovePonymons')]
         text = '```Доступные действия для ПоNимона```\n'
-        for index, item in enumerate(listMoves):
+        for index, item in enumerate(chancedDropMoves):
             if 0 <= random.randint(0, 100) <= chancedDropMoves[item]:
                 text += f'**`-> {movesToRu(item)}`**\n'
                 components.append(
@@ -752,6 +768,31 @@ class FightLoop(commands.Cog):
 
         await inter.response.edit_message(embed=embed, components=buttons)
 
+
+    @commands.Cog.listener('on_button_click')
+    async def confirmEscapeFromBattle(self, inter: disnake.MessageInteraction):
+        accList = ['escape', 'no-escape']
+        for item in accList:
+            if inter.component.custom_id.startswith(item): break
+        else: return
+
+        comm, users, message = inter.component.custom_id.split('|')
+        objFile = loadObjectFight(users=users)
+
+        if comm == 'escape':
+            msg = await self.bot.get_guild(inter.guild.id).get_channel(inter.channel.id).fetch_message(message)
+
+            await inter.response.edit_message(embed=disnake.Embed(description='**Вы точно не попадёте в Вальхаллу.**'), components=None)
+            await msg.edit(components=None)
+
+            await objFile.RunAwayFromBattle(msg, inter.author.id)
+            
+            await asyncio.sleep(3)
+            await inter.followup.delete_message(inter.message.id)
+        else:
+            await inter.response.edit_message(embed=disnake.Embed(description='**Отличное решение!**'), components=None)
+
+
     # Прослушиватель для побега с боя
     #? Не сделано
     @commands.Cog.listener('on_button_click')
@@ -768,18 +809,16 @@ class FightLoop(commands.Cog):
             await inter.response.send_message('Вы не являетесь участником боя.', ephemeral=True)
             return
         
-        print(objFile.Dbox)
-        await inter.response.defer()
+        buttons = [
+            disnake.ui.Button(style=disnake.ButtonStyle.danger, label='Да', custom_id=f'escape|{users}|{inter.message.id}'),
+            disnake.ui.Button(style=disnake.ButtonStyle.green, label='Нет', custom_id=f'no-escape|{users}|{inter.message.id}')
+            ]
+
+        await inter.response.send_message(embed=disnake.Embed(description='**Вы точно уверены в данном решении?\nСбегают только трусы.**'), components=buttons, ephemeral=True)
 
         # import pprint
         # ob = objFile.toSave()
         # pprint.PrettyPrinter(width=5).pprint(ob)
-
-#! Форма карты предметов
-# ids:{
-#   name:"",
-#   action:""
-# }
 
 class MainLoop:
     def __init__(self, fileUsers, data=None) -> None:
@@ -869,17 +908,150 @@ class MainLoop:
         return data
 
 
-    async def savePokemonsPVP(self, updateMap, deleteMap):
-        pass
+    async def savePokemonsPVP(self, winner, looser, deleteMap):
 
-    def savePokemonsPVE(self, updateMap, deleteMap):
-        pass
+        pid_1 = winner['id'] if not winner['bot'] else looser['id'] 
+        pid_2 = looser['id'] if not looser['bot'] else winner['id']
+
+        userBag = await giveUserBag(pid_1)
+        for item in winner['pokemons']:
+            if not winner['pokemons'][item]: continue
+
+            ids, seq = winner['pokemons'][item]['innerID'].split('-')
+            winner['pokemons'][item]['other_param']['timestamp_hp'] = round(time.time())
+            try: userBag[ids][seq] = winner['pokemons'][item]
+            except:pass
+
+        else:
+            await saveBagUserFile(userBag, pid_1)
+
+        userBag = await giveUserBag(pid_2)
+        for item in looser['pokemons']:
+            if not looser['pokemons'][item]: continue
+
+            ids, seq = looser['pokemons'][item]['innerID'].split('-')
+            looser['pokemons'][item]['other_param']['timestamp_hp'] = round(time.time())
+            try: userBag[ids][seq] = looser['pokemons'][item]
+            except: pass
+
+        else:
+            await saveBagUserFile(userBag, pid_2)
 
 
-    async def RunAwayFromBattle(self, message,  winner,  looser):
+        for item in deleteMap:
+            userBag = await giveUserBag(item)
+
+            if not deleteMap[item]: continue
+
+            for pokes in deleteMap[item]:
+
+                ids, seq = pokes.split('-')
+                ponymon = copy.deepcopy(userBag[ids][seq])
+                del userBag[ids][seq]
+                
+                ponymon['other_param']['healpoint_now'] = ponymon['params']['healpoint']
+                ponymon['other_param']['timestamp_hp'] = round(time.time())
+                ponymon['innerID'] = f'{ids}-HELL'
+
+                await saveHellMarket_DeadFight(ponymon=ponymon)
+        
+            await saveBagUserFile(userBag, item)
+
+
+    async def savePokemonsPVE_BASE(self, winner, looser, deleteMap):
+
+        pid_1 = winner['id'] if not winner['bot'] else looser['id'] 
+        pid_2 = looser['id'] if not looser['bot'] else winner['id']
+
+        userBag = await giveUserBag(pid_1)
+        for item in winner['pokemons']:
+            if not winner['pokemons'][item]: continue
+
+            ids, seq = winner['pokemons'][item]['innerID'].split('-')
+            winner['pokemons'][item]['other_param']['timestamp_hp'] = round(time.time())
+            try: userBag[ids][seq] = winner['pokemons'][item]
+            except:pass
+
+        else:
+            await saveBagUserFile(userBag, pid_1)
+
+        userBag = await giveUserBag(pid_2)
+        for item in looser['pokemons']:
+            if not looser['pokemons'][item]: continue
+
+            ids, seq = looser['pokemons'][item]['innerID'].split('-')
+            looser['pokemons'][item]['other_param']['timestamp_hp'] = round(time.time())
+            try: userBag[ids][seq] = looser['pokemons'][item]
+            except: pass
+
+        else:
+            await saveBagUserFile(userBag, pid_2)
+
+
+        for item in deleteMap:
+            userBag = await giveUserBag(item)
+
+            if not deleteMap[item]: continue
+
+            for pokes in deleteMap[item]:
+
+                ids, seq = pokes.split('-')
+                ponymon = userBag[ids][seq]
+                
+                ponymon['other_param']['healpoint_now'] = 1
+                ponymon['other_param']['timestamp_hp'] = round(time.time())
+
+                userBag[ids][seq] = ponymon
+        
+            await saveBagUserFile(userBag, item)
+
+
+    async def RunAwayFromBattle(self, message, Runner_id):
         #? При побеге бегущие получают урон в 15% от здоровья
-        #? Опыт при побеге не получается
-        pass
+        #? Опыт при побеге не получают
+
+        if self.p1['id'] == Runner_id :
+            runner = self.p1 
+            winner = self.p2
+        else:
+            runner = self.p2
+            winner = self.p1
+
+        for slot in runner['pokemons']:
+            pokes = runner['pokemons'][slot]
+            if not pokes: continue
+
+            pokes['other_param']['healpoint_now'] -= round(pokes['params']['healpoint'] * 0.15)
+            if pokes['other_param']['healpoint_now'] <= 0: 
+                self.Dbox[0].append(pokes)
+                self.temporalLogs += f'`<<Покемон [{pokes['name']}] был убит>>`\n'
+                runner['pokemons'][slot] = None
+        
+        deadly = ''
+        deleteMap = {}
+        for item in self.Dbox[0]:
+            if item is None: continue
+            deadly += f'**DEAD:** _-> {item['name']}_\n' 
+
+            if item['owner'] in list(deleteMap.keys()):
+                deleteMap[item['owner']].append(item['innerID'])
+            else:
+                deleteMap[item['owner']] = [item['innerID']]
+        else:
+            if deadly == '': deadly = '**Похоже сегодня никто не умер. Отрадно.**'
+            else: pass
+
+        self.EndBattle = True
+
+        Rank(user=Runner_id).downRank(value=2)
+
+        await setFightStatus(self.p1['id'], status=False) #? Для первого игрока
+        await setFightStatus(self.p2['id'], status=False) #? Для второго игрока
+
+        if self.p2['bot']: await self.savePokemonsPVE_BASE(winner, runner, deleteMap)
+        else: await self.savePokemonsPVP(winner, runner, deleteMap)
+
+        await message.edit(embed=disnake.Embed(description=f'## Один из игроков решил сделать побег.\nПонимоны игрока, что убежал, потеряли 15% здоровья, так как не стрелять в спину убегающего, глупо.\nСбежавший: -2 рейтинга.\n\n`<<< Умершие понимоны >>>`\n{deadly}'))
 
     async def battleEnd(self, message,  winner,  looser):
         '''Учесть, что следует удалить у покемонов перед сохранением: moveCount, modifacators'''
@@ -892,75 +1064,79 @@ class MainLoop:
                 }
             firstSelect = choice(list(params.keys()))
             secondSelect = choice(list(params[firstSelect].keys()))
-            return (firstSelect, secondSelect, random.randint(1, 2), params[firstSelect][secondSelect])
+            return (firstSelect, secondSelect, random.randint(1, 5), params[firstSelect][secondSelect])
 
         pokeExpUp = ''
-        updateMap = {}
         for item in winner['pokemons']:
             if winner['pokemons'][item] is None: continue
 
-            expGen = random.randint(10, 75)
-            paramGen = paramGenerator()
 
-            pokeExpUp += f'**Winner:** _-> {winner['pokemons'][item]['name']} (+{expGen}exp / +{paramGen[2]}{paramGen[3]})_\n'
 
-            winner['pokemons'][item]['other_param']['exp'] += expGen
-            winner['pokemons'][item][paramGen[0]][paramGen[1]] += paramGen[2]
+            if not (winner['bot'] or looser['bot']):
+
+                ramExp = random.randint(50, 300)
+                stepExp = (self.step * 3) if (self.step * 3) <= 150 else 150 
+                seqRank = 0
+
+                expGen = ramExp + stepExp + seqRank
+                paramGen = paramGenerator()
+
+                pokeExpUp += f'**Winner:** _-> {winner['pokemons'][item]['name']} (+{expGen}exp / +{paramGen[2]}{paramGen[3]})_\n'
+
+                winner['pokemons'][item]['other_param']['exp'] += expGen
+                winner['pokemons'][item][paramGen[0]][paramGen[1]] += paramGen[2]
+                winner['pokemons'][item]['other_param']['essence_drop'] += random.randint(2, 8)
+            else:
+                ramExp = random.randint(1, 50)
+                stepExp = self.step if self.step <= 25 else 25 
+                seqRank = 0
+                
+                expGen = ramExp + stepExp + seqRank
+
+                pokeExpUp += f'**Winner:** _-> {winner['pokemons'][item]['name']} (+{expGen}exp)_\n'
+
+                winner['pokemons'][item]['other_param']['exp'] += expGen
 
             del winner['pokemons'][item]['modifacators']
             del winner['pokemons'][item]['moveCount']
+            winner['pokemons'][item]['other_param']['timestamp_hp'] = round(time.time())
 
-            if winner['id'] is list(updateMap.keys()):
-                updateMap[winner['id']][winner['pokemons'][item]['innerID']] = {
-                    'exp':expGen,
-                    paramGen[0]:{paramGen[1]:paramGen[2]}
-                    }
-            else:
-                updateMap[winner['id']] = {
-                    winner['pokemons'][item]['innerID'] : {
-                        'exp':expGen,
-                        paramGen[0]:{paramGen[1]:paramGen[2]}
-                        }
-                    }
 
         for item in looser['pokemons']:
             if looser['pokemons'][item] is None: continue
 
-            expGen = random.randint(1, 15)
+            if not (winner['bot'] or looser['bot']):
+                ramExp = random.randint(1, 25)
+                stepExp = self.step if self.step <= 10 else 10 
+                seqRank = 0
+                
+                expGen = ramExp + stepExp + seqRank
 
-            pokeExpUp += f'**Lose:** _-> {looser['pokemons'][item]['name']} (+{expGen}exp)_\n'
+                pokeExpUp += f'**Lose:** _-> {looser['pokemons'][item]['name']} (+{expGen}exp)_\n'
 
-            looser['pokemons'][item]['other_param']['exp'] += expGen
+                winner['pokemons'][item]['other_param']['exp'] += expGen
 
-            del looser['pokemons'][item]['modifacators']
-            del looser['pokemons'][item]['moveCount']
-
-            if looser['id'] is list(updateMap.keys()):
-                updateMap[looser['id']][looser['pokemons'][item]['innerID']] = {
-                    'exp':expGen
-                    }
             else:
-                updateMap[looser['id']] = {
-                    looser['pokemons'][item]['innerID'] : {
-                        'exp':expGen
-                        }
-                    }
+                pokeExpUp += f'**Lose:** _-> {winner['pokemons'][item]['name']}_\n'
+
+            del winner['pokemons'][item]['modifacators']
+            del winner['pokemons'][item]['moveCount']
+            winner['pokemons'][item]['other_param']['timestamp_hp'] = round(time.time())
+
 
         pokeDie = ''
         deleteMap = {}
         for item in self.Dbox[0]:
             if item is None: continue
-            pokeDie += f'**DEAD:** _-> {item['name']}_\n'
-            
-            deleteMap 
+            pokeDie += f'**DEAD:** _-> {item['name']}_\n' 
 
-            if item['owner'] is list(deleteMap.keys()):
-                deleteMap[item['owner']].append([item['inner']])
+            if item['owner'] in list(deleteMap.keys()):
+                deleteMap[item['owner']].append(item['innerID'])
             else:
-                deleteMap[item['owner']] = []
+                deleteMap[item['owner']] = [item['innerID']]
 
 
-        looseText = f'```Итоги боя```\n## Победитель: [{winner['name']}]\nПолучено: +2 репутации (-2 у проигравшего)\n\n**`<<< Покемоны получившие опыт >>>`**\n{pokeExpUp}\n**`<<< Потерянные покемоны >>>`**\n{pokeDie}'
+        looseText = f'```Итоги боя```\n## Победитель: [{winner['name']}]\nПолучено: +2 репутации (-2 у проигравшего)\n\n**`<<< Понимоны получившие опыт >>>`**\n{pokeExpUp}\n**`<<< Потерянные понимоны >>>`**\n{pokeDie}'
 
         embed = disnake.Embed(description=looseText, colour=disnake.Color.dark_green())
         await message.edit(embed=embed, components=None)
@@ -969,8 +1145,11 @@ class MainLoop:
         await setFightStatus(self.p2['id'], status=False) #? Для второго игрока
 
         self.EndBattle = True
-        if self.p2['bot']: await self.savePokemonsPVE(updateMap, deleteMap)
-        else: await self.savePokemonsPVP(updateMap, deleteMap)
+        Rank(user=winner['id']).upRank(value=2)
+        Rank(user=looser['id']).downRank(value=2)
+
+        if self.p2['bot']: await self.savePokemonsPVE_BASE(winner, looser, deleteMap)
+        else: await self.savePokemonsPVP(winner, looser, deleteMap)
 
     
     # Обновление страницы информации, конечная точка расчетов
@@ -979,6 +1158,10 @@ class MainLoop:
 
         self.log.append(self.temporalLogs)
         self.temporalLogs = ''
+        self.p1['move'] = {'slot0':None, 'slot1':None,'slot2':None}
+        self.p2['move'] = {'slot0':None, 'slot1':None,'slot2':None}
+
+        saveObjectFight(users=self.fileUsers, yamls=self.toSave())
 
         countNones = 0
         for item in self.p1['pokemons']:
@@ -1036,24 +1219,27 @@ class MainLoop:
 
             if str(firstPunch['move'][item]).startswith('atk') or firstPunch['move'][item] is None:
                 if str(secondPunch['move'][item]).startswith('deff') and firstPunch['move'][item] is None:
-                    await listMoves['deff'](self, firstPunch['pokemons'][item], secondPunch['pokemons'][target], firstPunch)
+                    await self.deffence(firstPunch['pokemons'][item], secondPunch['pokemons'][target], firstPunch)
                 
                 elif str(secondPunch['move'][item]).startswith('deff') and firstPunch['move'][item] is not None:
-                    await listMoves['deff'](self, firstPunch['pokemons'][item], secondPunch['pokemons'][target], firstPunch)
+                    await self.deffence(firstPunch['pokemons'][item], secondPunch['pokemons'][target], firstPunch)
 
                 else:
-                    await listMoves['atk'](self, firstPunch['pokemons'][item], secondPunch['pokemons'][target], firstPunch)
+                    await self.attack(firstPunch['pokemons'][item], secondPunch['pokemons'][target], firstPunch)
                 
                 if secondPunch['pokemons'][target]['other_param']['healpoint_now'] <= 0:
                     self.Dbox[0].append(secondPunch['pokemons'][target])
                     self.temporalLogs += f'`<<Покемон [{secondPunch['pokemons'][target]['name']}] был убит>>`\n'
                     secondPunch['pokemons'][target] = None
 
-            elif str(firstPunch['move'][item]).startswith(('deff', 'env')):
-                continue
+            elif str(firstPunch['move'][item]).startswith('env'):
+                self.temporalLogs += f'**[{firstPunch['pokemons'][item]['name']}] - `Уворачивался`**\n'
+
+            elif str(firstPunch['move'][item]).startswith('deff'):
+                self.temporalLogs += f'**[{firstPunch['pokemons'][item]['name']}] - `Защищался`**\n'
 
             elif str(firstPunch['move'][item]).startswith('sheal'):
-                await listMoves['sheal'](self, firstPunch)
+                await self.selfHeal(firstPunch['pokemons'][item])
         
         self.temporalLogs += f'\n**`|[ {secondPunch['name']} ]|`**\n'
         for index, item in enumerate(secondPunch['pokemons']):
@@ -1075,24 +1261,27 @@ class MainLoop:
 
             if str(secondPunch['move'][item]).startswith('atk') or secondPunch['move'][item] is None:
                 if str(firstPunch['move'][item]).startswith('deff') and secondPunch['move'][item] is None:
-                    await listMoves['deff'](self, secondPunch['pokemons'][item], firstPunch['pokemons'][target], secondPunch)
+                    await self.deffence(secondPunch['pokemons'][item], firstPunch['pokemons'][target], secondPunch)
                 
                 elif str(firstPunch['move'][item]).startswith('deff') and secondPunch['move'][item] is not None:
-                    await listMoves['deff'](self, secondPunch['pokemons'][item], firstPunch['pokemons'][target], secondPunch)
+                    await self.deffence(secondPunch['pokemons'][item], firstPunch['pokemons'][target], secondPunch)
 
                 else:
-                    await listMoves['atk'](self, secondPunch['pokemons'][item], firstPunch['pokemons'][target], secondPunch)
+                    await self.attack(secondPunch['pokemons'][item], firstPunch['pokemons'][target], secondPunch)
 
                 if firstPunch['pokemons'][target]['other_param']['healpoint_now'] <= 0:
-                    self.Dbox[0].append(secondPunch['pokemons'][target])
+                    self.Dbox[0].append(firstPunch['pokemons'][target])
                     self.temporalLogs += f'`<<Покемон [{firstPunch['pokemons'][target]['name']}] был убит>>`\n'
                     firstPunch['pokemons'][target] = None
 
-            elif str(secondPunch['move'][item]).startswith(('deff', 'env')):
-                continue
+            elif str(secondPunch['move'][item]).startswith('env'):
+                self.temporalLogs += f'**[{secondPunch['pokemons'][item]['name']}] - `Уворачивался`**\n'
+
+            elif str(secondPunch['move'][item]).startswith('deff'):
+                self.temporalLogs += f'**[{secondPunch['pokemons'][item]['name']}] - `Защищался`**\n'
 
             elif str(secondPunch['move'][item]).startswith('sheal'):
-                await listMoves['sheal'](self, secondPunch)
+                await self.selfHeal(secondPunch['pokemons'][item])
 
 
 
@@ -1102,13 +1291,21 @@ class MainLoop:
 
     async def attack(self, attacked, target, who):
         atk = round(attacked['params']['attack'] * (1 - (target['params']['armor'])))
-        envBOOL = 1 <= random.random() <= (1 -target['params']['evasion'])
+        diapATK = random.randint(round(atk*0.8), round(atk*1.2))
+
+        envBOOL = 0 <= random.random() <= float(target['params']['evasion'])
+        CritStrike = 0 <=  random.random() <= 0.2
 
         if envBOOL:
-            self.temporalLogs += f'**[{target['name']}] увернулся от атаки [{attacked['name']}]**\n'
+            self.temporalLogs += f'**[{target['name']}] `увернулся` от атаки [{attacked['name']}]**\n'
+        
+        elif CritStrike:
+            target['other_param']['healpoint_now'] -= round(diapATK * 2)
+            self.temporalLogs += f'**[{attacked['name']}] нанес `критического урона` {diapATK * 2} урона [{target['name']}]**\n'
+
         else:
-            target['other_param']['healpoint_now'] -= atk
-            self.temporalLogs += f'**[{attacked['name']}] нанес {atk} урона [{target['name']}]**\n'
+            target['other_param']['healpoint_now'] -= diapATK
+            self.temporalLogs += f'**[{attacked['name']}] `нанес` {diapATK} урона [{target['name']}]**\n'
 
         if target['other_param']['healpoint_now'] <= 0: target['other_param']['healpoint_now'] = 0
 
@@ -1118,19 +1315,33 @@ class MainLoop:
         diapATK = random.randint(round(atk*0.8), round(atk*1.2))
 
         atkToDown = round(attacked['params']['attack'] * (1 - (target['params']['armor'])))
-        envBOOL = 1 <= random.random() <= (1 -target['params']['evasion'])
+        
+        envBOOL = 0 <= random.random() <= float(target['params']['evasion'])
+        CritStrike = 0 <=  random.random() <= 0.2
 
         if envBOOL:
-            self.temporalLogs += f'**[{target['name']}] увернулся от атаки [{attacked['name']}]**\n'
+            self.temporalLogs += f'**[{target['name']}] `увернулся` от атаки [{attacked['name']}]**\n'
+        
+        elif CritStrike:
+            target['other_param']['healpoint_now'] -= round(diapATK * 2)
+            self.temporalLogs += f'**[{attacked['name']}] нанес `критического урона` {diapATK * 2} урона [{target['name']}]**\n'
+        
         else:
             target['other_param']['healpoint_now'] -= diapATK
-            self.temporalLogs += f'**[{attacked['name']}] нанес {diapATK} урона [{target['name']}], намеренная защита снизила урон на ({atkToDown - diapATK})**\n'
+            self.temporalLogs += f'**[{attacked['name']}] `нанес` {diapATK} урона [{target['name']}], намеренная защита снизила урон на ({atkToDown - diapATK})**\n'
     
         if target['other_param']['healpoint_now'] <= 0: target['other_param']['healpoint_now'] = 0
 
     async def selfHeal(self, target):
-        target['other_param']['healpoint_now'] += target['params']['regen']
-        self.temporalLogs += f'_[{target}] вылечил себя на {target['params']['regen']}hp_'
+        heal = target['params']['regen'] + round(target['params']['healpoint'] * 0.10)
+
+        target['other_param']['healpoint_now'] += heal
+        if target['other_param']['healpoint_now'] > target['params']['healpoint']: 
+            minus = target['other_param']['healpoint_now'] - target['params']['healpoint']
+            target['other_param']['healpoint_now'] = target['params']['healpoint']
+            heal = heal - minus
+
+        self.temporalLogs += f'**[{target['name']}] `вылечил` себя на {heal}hp**\n'
 
 
     async def usePerk(toWhom, perk_slot, whoUse):

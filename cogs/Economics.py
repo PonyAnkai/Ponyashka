@@ -5,7 +5,6 @@ from .module import REQ_database as Rdb
 import json
 import yaml
 import pickle
-import sqlite3
 
 import time
 import random
@@ -40,6 +39,13 @@ class Economics(commands.Cog):
     @commands.command(name='wallet', aliases=['кошелёк', 'кошелек', 'кошель', 'wl'])
     async def wallet(self, ctx):
 
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='wallet')
+            return
+        else: del userEnter
+
         user = ctx.message.author.id
         stat = await userData(uid=user)
         poke = db.Poke(user=ctx.author.id).takeAll()
@@ -59,15 +65,23 @@ class Economics(commands.Cog):
     @commands.command(name='work', aliases=['работа', 'раб'])
     async def work(self, ctx):
 
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='work')
+            return
+        else: del userEnter
+
         if db.Lock(user_id=ctx.author.id, slot=1).ready() or ctx.author.id == 374061361606688788:
             db.Check(user_id=ctx.author.id, user_name=ctx.author.name).user()
             cashIncome = await calculateValueWorkPokemon(user=ctx.author.id, sys=True)
-
+            
             info = db.Poke(user=ctx.author.id).takeAll()
             strikeMulti = await checkStrikeWork(info[1])
             timestamp = (round(time.time()) - info[2])//3600
             strikeup = 24 > timestamp >= 0
             dropstrike = (strikeup//24) > 5
+
 
             text = ''
             pokemonIncome = 0
@@ -80,8 +94,10 @@ class Economics(commands.Cog):
 
             cashUser = round(random.randint(15, 120) * strikeMulti)
             cash = pokemonIncome + cashUser
+
             embed = disnake.Embed(description=f'### Вы заработали: `{cashUser}es`\n\n{text}\nОбщая прибыль: `+{cash}es`\n`Приходите позже!`', colour=disnake.Colour.dark_green())
             embed.set_footer(text=f'Вызвал: {ctx.author.name}.   Текущий стрик: {info[1]+1} = {strikeMulti}x')
+
             if db.Money(user=ctx.author.id, value=cash).add():
                 if strikeup and not dropstrike: 
                     db.Poke(user=ctx.author.id).update(value=round(time.time()))
@@ -110,9 +126,13 @@ class Economics(commands.Cog):
         def weightRank(rank):
             order = {"?":-1,"EX":0, "S":1, "A":2, "B":3, "C":4, "D":5, "E":6, "F":7}
             return order[rank]
+        
+
         async def bestRoll(count, best:bool):
+            freeRoll = db.Poke(inter.author.id).takeAll()[4]
             priceTiket = await GetTiketPrice(inter.author.id)
-            data = await RollLotery(user=inter.author.id, count=count, priceTiket=priceTiket)
+            data = await RollLotery(user=inter.author.id, freeRoll=freeRoll, count=count, priceTiket=priceTiket)
+            freeRoll = db.Poke(inter.author.id).takeAll()[4]
 
             text = ''
             SortedData = sorted(data['loot'], key=lambda x: weightRank(x[1]['rank']))
@@ -168,23 +188,24 @@ class Economics(commands.Cog):
                 description=f"# ```Ты выиграл в лотереи...```\n{text}\n`{data['compliment']}`\n",
                 colour=disnake.Colour.dark_gold()           
                 )
-            embed.set_footer(text=f'Вызвал: <{inter.author.name}> | Цена за тикет = <{priceTiket}>')
+            embed.set_footer(text=f'Вызвал: <{inter.author.name}> | Цена за тикет = <{priceTiket}>\nБилетов: {freeRoll}')
 
             await inter.response.edit_message(embed=embed, components=data['buttons'])
 
         if inter.component.custom_id == 'lotery_1':
             priceTiket = await GetTiketPrice(inter.author.id)
-            data = await RollLotery(user=inter.author.id, priceTiket=priceTiket)
+            freeRoll = db.Poke(inter.author.id).takeAll()[4]
+            data = await RollLotery(user=inter.author.id, freeRoll=freeRoll, priceTiket=priceTiket)
             loots = data['loot'][0]
 
             text = f"# ```Ты выиграл в лотереи...```\n## → {loots[1]['name']} `({loots[0]})`\n"
             if loots[3]: text += f'>20, Продан по ставке 75%: +`{data['sellIncome']}(es)`'
-            text += f'`\n{data['compliment']}`'
+            text += f'\n`{data['compliment']}`'
             embed = disnake.Embed(
                 description=text,
                 colour=loots[2]           
                 )
-            embed.set_footer(text=f'Вызвал: <{inter.author.name}> | Цена за тикет = <{priceTiket}>')
+            embed.set_footer(text=f'Вызвал: <{inter.author.name}> | Цена за тикет = <{priceTiket}>\nБилетов: {db.Poke(inter.author.id).takeAll()[4]}')
 
             await inter.response.edit_message(embed=embed, components=data['buttons'])
         elif inter.component.custom_id == 'lotery_5':
@@ -200,42 +221,47 @@ class Economics(commands.Cog):
         try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
         except: userEnter = None
         if userEnter in ['?', 'help']:
-            Until.helpedUser(ctx, info='lotery')
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='lotery')
             return
         else: del userEnter
 
         # TODO: Добавить использование билетов, если они есть, а также подтверждение, если недостающую часть будет догонятся деньгами.
         user = await userData(ctx.author.id)
         essence = user['money']['ESSENCE']
+        freeRoll = db.Poke(ctx.author.id).takeAll()[4]
+
         priceTiket = await GetTiketPrice(ctx.author.id)
-        if priceTiket*5 > essence >= priceTiket:
-            data = await RollLotery(user=ctx.author.id, priceTiket=priceTiket)
+        countToRoll = freeRoll + (essence // priceTiket)
+
+        if 5 > countToRoll >= 1:
+            data = await RollLotery(user=ctx.author.id, freeRoll=freeRoll, priceTiket=priceTiket)
+            freeRoll = db.Poke(ctx.author.id).takeAll()[4]
             loots = data['loot'][0]
 
             embed = disnake.Embed(
                 description=f"# ```Ты выиграл в лотереи...```\n# {loots[1]['name']} `(Rank: {loots[0]})`\n## `{data['compliment']}`\n",
                 colour=loots[2]         
                 )
-            embed.set_footer(text=f'Крутил барабан: <{ctx.author.name}> | Цена за тикет = <{priceTiket}>')
+            embed.set_footer(text=f'Крутил барабан: <{ctx.author.name}> | Цена за тикет = <{priceTiket}>\nБилетов: {freeRoll}')
 
-            savePokemon(loot=data['loot'], uid=ctx.author.id)
-
-            await ctx.send(embed=embed, components=data['buttons'])
-        elif essence > priceTiket*5:
+            message = await ctx.send(embed=embed, components=data['buttons'])
+            await closeEmbedMessageAfter(message, time=120)
+        elif countToRoll >= 5:
             user = await userData(ctx.author.id)
             essence = user['money']['ESSENCE']
-            buttons = await checkButtonsLotery(essence=essence, priceTiket=priceTiket)
+            buttons = await checkButtonsLotery(countRoll=countToRoll)
 
             embed = disnake.Embed(
-                description=f"### Сколько желаете открыть?\nПри себе у вас ({await userHaveTicket(user=ctx.author.id)}) билетов, они используются первыми, а далее деньги.\n\n**1 билет:** `{priceTiket:,}`\n**5 билетов:** `{priceTiket*5:,}`\n**10 билетов:** `{priceTiket*10:,}`\n**50 билетов:** `{priceTiket*50:,}`",
+                description=f"### Сколько желаете открыть?\nПри себе у вас ({await userHaveTicket(user=ctx.author.id)}) билетов, они используются первыми, а далее деньги.\n**Всего, примерно, вы можете открыть:** `{countToRoll}`\n\n**1 билет:** `{priceTiket:,}`\n**5 билетов:** `{priceTiket*5:,}`\n**10 билетов:** `{priceTiket*10:,}`\n**50 билетов:** `{priceTiket*50:,}`",
                 colour=disnake.Colour.dark_orange()
                 )
             embed.set_footer(text=f'Вызвал: {ctx.author.name}')
 
-            await ctx.send(embed=embed, components=buttons)
+            message = await ctx.send(embed=embed, components=buttons)
+            await closeEmbedMessageAfter(message, time=60)
         else:
             embed = disnake.Embed(
-                description=f'```Похоже у вас не хватает средств\nСтоимость 1 крутки для вас равна {priceTiket} шекелям.```',
+                description=f'```Похоже у вас не хватает средств и билетов.\nСтоимость 1 крутки для вас равна {priceTiket} шекелям.```',
                 colour=disnake.Colour.dark_red()
                 )
             embed.set_footer(text=f'Вызвал: <{ctx.author.name}?')
@@ -250,37 +276,32 @@ class Economics(commands.Cog):
                 load = json.load(file)
                 loteryItem = load['items']
         except:
-            embed = disnake.Embed(description='```Похоже вы не обладаете ни одним покемонов. Возможно вы даже ещё не играли в гачу-рулетку. Попробуйте.```')
+            embed = disnake.Embed(description='```Похоже вы не обладаете ни одним понимонов. Возможно вы даже ещё не играли в гачу-рулетку. Попробуйте.```')
             await ctx.send(embed=embed)
             return
 
         text = ''
-        order = ["?", "EX", "S", "A", "B", "C", "D", "E", "F"]
-        mapingPokemons = {}
+        MapRank = {"?":{}, "EX":{}, "S":{}, "A":{}, "B":{}, "C":{}, "D":{}, "E":{}, "F":{}}
 
         # text += f'`({countPet}) {randomPet['name']}` '
         # text += f'```{itemORD} - rank ```'
 
-        for itemORD in order:
-            for item in userBag:
-                try: randomPet = userBag[item][choice(list(userBag[item].keys()))]
-                except: continue
-                countPet = len(userBag[item])
+        for ids in userBag:
+            for seq in userBag[ids]:
+                poke = userBag[ids][seq]
+                ranked = MapRank[poke['rank']]
 
-                if randomPet['rank'] != itemORD: continue
-
-                if randomPet['rank'] in mapingPokemons:
-                    card = {"name":randomPet['name'], "count":countPet}
-                    mapingPokemons[randomPet['rank']].append(card)
+                if ids in list(ranked.keys()):
+                    ranked[ids].append(poke['name'])
                 else:
-                    mapingPokemons[randomPet['rank']] = [{"name":randomPet['name'], "count":countPet}]
+                    ranked[ids] = [poke['name']]
                 
-        for rank in order:
-            if rank not in mapingPokemons: continue
+        for rank in MapRank:
+            if not list(MapRank[rank].keys()): continue
+            text += f'```<{rank}> — Ранг```'
 
-            text += f'```{rank} - rank ```'
-            for poke in mapingPokemons[rank]:
-                text += f'`({poke['count']}) {poke['name']}` '
+            for ids in MapRank[rank]:
+                text += f'`[{len(MapRank[rank][ids])}x {MapRank[rank][ids][0]}]` '
 
 
         if text == '': text = '**У вас тут пусто. Даже перекати поля нет.**'
@@ -289,6 +310,7 @@ class Economics(commands.Cog):
             )
         embed.set_footer(text=f'Вызвал: {ctx.author.name}')
         message = await ctx.send(embed=embed)
+        # TODO: Enable after update
         await closeEmbedMessageAfter(message, time=60)
 
     @commands.Cog.listener("on_button_click")
@@ -393,6 +415,13 @@ class Economics(commands.Cog):
 
     @commands.command(name='craft', aliases=['cfs', 'крафтдуш', 'создать'])
     async def craft(self, ctx):
+
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='craft')
+            return
+        else: del userEnter
 
         user = ctx.message.author.id
         db.Check(user_id=user, user_name=ctx.message.author.name).user()
@@ -507,8 +536,16 @@ class Economics(commands.Cog):
         elif component == 'item_break_uncf':
            pass
 
-    @commands.command(name='uncraft', aliases=['unc', 'сломать', 'разломать', 'разбор', 'переработать'])
+    @commands.command(name='uncraft', aliases=['unc', 'разломать', 'разбор'])
     async def uncraft(self, ctx):
+
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='uncraft')
+            return
+        else: del userEnter
+
         user = ctx.message.author.id
         db.Check(user_id=user, user_name=ctx.message.author.name).user()
 
@@ -530,11 +567,18 @@ class Economics(commands.Cog):
 
     @commands.command(name='sellpoke', aliases=['продать', 'slp'])
     async def sellpoke(self, ctx):
-        # Одиночная продажа имеет флаги: all, по стандарту one
-        # Без подтверждения действия о продажи всех покемонов
+        
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='sellpoke')
+            return
+        else: del userEnter
 
-        # Продажа по рангам, переделать, да и просто починить, дабы можно было продать несколько рангов
-        # Выскакивает подтверждение на действие с описанием, что будут проданы все покемоны, а те, что работают из этого ранга, будут сняты
+        checkFight = await checkInFightStatus(uid=ctx.author.id)
+        if checkFight:
+            await ctx.send(embed=disnake.Embed(description='**Ой! Похоже вы находитесь в бою!**\n**Во время боя нельзя торговать понимонами.**'))
+            return
 
         name = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
         ranksToSell = ['?', 'EX', 'S', 'A', 'B', 'C', 'D', 'E', 'F']
@@ -566,19 +610,30 @@ class Economics(commands.Cog):
             else: flag = 'one'
             pokemon = pokemon.split(' -')[0]
 
+
             rankSell = True
             if pokemon.upper() in ranksToSell: 
                 rankSell = False
 
             else:
                 pokemonID = await findID_PokemonInDB_LikeName(PokemonName=pokemon)
+
                 if pokemonID is None:
-                    if not mass:
-                        errorsInput.append(pokemon)
-                        return False
-                    else:
-                        errorsInput.append(pokemon)
-                        return False
+                    try:
+                        try:
+                            ids, seq = pokemon.split('=')
+                            pokemon_likeName, ids = await findMap_PokemonInDB_LikeID(ID=ids)
+                            pokemonID = ids
+                        except:
+                            pokemon_likeName, ids = await findMap_PokemonInDB_LikeID(ID=pokemon)
+                            pokemonID = pokemon
+                    except:
+                        try:
+                            pokeName, seq = pokemon.split('=')
+                            pokemonID = await findID_PokemonInDB_LikeName(PokemonName=pokeName)
+                        except:
+                            errorsInput.append(pokemon)
+                            return
 
             
             if rankSell:
@@ -604,11 +659,10 @@ class Economics(commands.Cog):
                         else:
                             pokeHowSell = userBagPoke[random.choice(associate)]['name']
                         
-                        commandToSell = True
                         sellValueList = (timesSelled, count)
 
                         del userBag[pokemonID]
-                        endSelled.append((commandToSell, sellValueList, pokeHowSell, (False, None), (False, None)))
+                        endSelled.append((True, sellValueList, pokeHowSell, (False, None), (False, None)))
                     except:
                         pokesWhatWannaSell = await findMap_PokemonInDB_LikeID(ID=pokemonID)
                         endSelled.append((False, (0, 0), pokesWhatWannaSell['name'], (False, None), (False, None)))
@@ -619,43 +673,72 @@ class Economics(commands.Cog):
                     # 2. Через флаг слеш указывается ids. <name>/<count>
                     # Поиск реальности существования данного покемона
                     # input -> rank
-                    pokemonID = await findID_PokemonInDB_LikeName(PokemonName=pokemon)
-                    rank = (await findMap_PokemonInDB_LikeID(ID=pokemonID))['rank']
+                    try:
+                        poke, seq = pokemon.split('=')
+                        ids = await findID_PokemonInDB_LikeName(PokemonName=poke)
+                        if not ids: ids = poke
 
-                    options = []
-                    userBagPoke = userBag[pokemonID]
+                        pokesToSell = userBag[ids][seq]
 
-                    for index, item in enumerate(userBagPoke):
-                        options.append(
-                            disnake.SelectOption(
-                                label=f'({index+1}) {userBagPoke[item]['name']} ({userBagPoke[item]['curr']['price']} es)',
-                                value=f'poke|{index+1}|{pokemonID}-{item}|{userBagPoke[item]['curr']['price']}'
-                                )
-                            )
-                    else:
-                        options.append(
-                            disnake.SelectOption(
-                                label=f'Отменить продажу',
-                                value=f'cannelSell|null|null|999999999999999999'
-                                )
-                            )
-                    options.sort(key=lambda x: int(x.value.split('|')[3]), reverse=True)
-                    
-                    view = SelectMassPokemonsViewCorrectSell(options=options, user=ctx.author.id)
-                    embed = disnake.Embed(description='**Выберите из списка ваших покемонов, того что желаете продать.**').set_footer(text='Для продажи всех, одного типа, используйте флаг [-all]')
-                    await ctx.send(embed=embed, view=view)
-                    return True
+                        sellValueList = (userBag[ids][seq]['curr']['price'] * 0.75, 1) 
+
+                        injectWorkFile(user=ctx.author.id, pokemon=userBag[ids][seq])                       
+                        del userBag[ids][seq]
+                        if len(userBag[ids]) == 0: del userBag[ids]
+                        endSelled.append((True, sellValueList, pokesToSell['name'], (False, None), (False, None)))
+                        await saveBagUserFile(userBag, ctx.author.id)
+                    except:
+                        try:
+                            pokemonID = await findID_PokemonInDB_LikeName(PokemonName=pokemon)
+                            if not pokemonID: pokemonID = pokemon
+
+                            options = []
+                            userBagPoke = userBag[pokemonID]
+
+                            for index, item in enumerate(userBagPoke):
+                                options.append(
+                                    disnake.SelectOption(
+                                        label=f'({index+1}) {userBagPoke[item]['name']} ({userBagPoke[item]['curr']['price']} es)',
+                                        value=f'poke|{index+1}|{pokemonID}-{item}|{userBagPoke[item]['curr']['price']}'
+                                        )
+                                    )
+                            else:
+                                options.append(
+                                    disnake.SelectOption(
+                                        label=f'Отменить продажу',
+                                        value=f'cannelSell|null|null|999999999999999999'
+                                        )
+                                    )
+                            options.sort(key=lambda x: int(x.value.split('|')[3]), reverse=True)
+                            
+                            view = SelectMassPokemonsViewCorrectSell(options=options, user=ctx.author.id)
+                            embed = disnake.Embed(description='**Выберите из списка ваших понимонов, того что желаете продать.**').set_footer(text='Для продажи всех, одного типа, используйте флаг [-all]')
+                            await ctx.send(embed=embed, view=view)
+                            return True
+                        except:
+                            try:
+                                ids, seq = pokemonID.split('=')
+                                pokesWhatWannaSell = await findMap_PokemonInDB_LikeID(ID=ids)
+                            except:
+                                try:
+                                    namePoke, seq = pokemon.split('=')
+                                    pokesWhatWannaSell, ids = await findMap_PokemonInDB_LikeName(name=namePoke)
+                                except:
+                                    pokesWhatWannaSell, ids = await findMap_PokemonInDB_LikeName(name=pokemon)
+
+                            endSelled.append((False, (0, 0), pokesWhatWannaSell['name'], (False, None), (False, None)))
                 return False
             else:
                 # Когда указывается ранг который надо продать
                 pokemonRank = pokemon.upper()
                 
                 userBagPokes = []
-                ids = []
-                for item in userBag:
-                    if userBag[item][choice(list(userBag[item].keys()))]['rank'] == pokemonRank: 
-                        userBagPokes.append(userBag[item])
-                        ids.append(item)
+                ids_seq = []
+                for ids_poke in userBag:
+                    for inner in userBag[ids_poke]:
+                        if userBag[ids_poke][inner]['rank'] == pokemonRank:
+                            userBagPokes.append(userBag[ids_poke][inner])
+                            ids_seq.append((ids_poke, inner))
 
 
                 if not userBagPokes:
@@ -666,21 +749,21 @@ class Economics(commands.Cog):
 
                 timesSelled = 0
                 for item in userBagPokes:
-                    for pokes in item:
-                        pricePokes = item[pokes]['curr']['price']
+                    pricePokes = item['curr']['price']
 
-                        injectWorkFile(user=ctx.author.id, pokemon=item[pokes])
-                        try:
-                            timesSelled += round(pricePokes * 0.75)
-                        except:
-                            print(pricePokes, item[pokes]['name'])
+                    injectWorkFile(user=ctx.author.id, pokemon=item)
+                    try:
+                        timesSelled += round(pricePokes * 0.75)
+                    except:
+                        print(pricePokes, item['name'])
 
                 else:
                     sellValueList = (timesSelled, len(userBagPokes)-1)
                     commandToSell = True
                     endSelled.append((commandToSell, sellValueList, None, (False, None), (True,pokemon)))
-                    for item in ids:
-                        del userBag[item]
+                    for item in ids_seq:
+                        del userBag[item[0]][item[1]]
+                        if len(userBag[item[0]]) == 0: del userBag[item[0]]
                     await saveBagUserFile(userBag, ctx.author.id)
         # В целом, скорей всего есть более элегантное решение, но мне так похуй. Лень искать, да и время жмёт.
         # Удачи будущему мне эту хуйню пытаться улучшать, для чего-то кардинально нового
@@ -715,13 +798,13 @@ class Economics(commands.Cog):
                 if item[1][1] > 1: endWords = ['и', 'ы']
                 else: endWords = ['', '']
 
-                text += f'✔ **Покемон{endWords[1]} [{item[2]}] был{endWords[0]} продан{endWords[1]} за `{round(item[1][0]):,}`es** ({item[1][1]} шт)\n'
+                text += f'✔ **Понимон{endWords[1]} [{item[2]}] был{endWords[0]} продан{endWords[1]} за `{round(item[1][0]):,}`es** ({item[1][1]} шт)\n'
 
             elif item[0] and item[4][0]:
-                text += f'✔ **Покемоны ранга [{item[4][1].upper()}] проданы за `{round(item[1][0]):,}`es** ({item[1][1]} вид(-ов))\n'
+                text += f'✔ **Понимоны ранга [{item[4][1].upper()}] проданы за `{round(item[1][0]):,}`es** ({item[1][1]} вид(-ов))\n'
 
             elif not item[0] and item[3][0]:
-                text += f'❌ **У вас нет покемонов из ранга [{item[3][1]}].**\n'
+                text += f'❌ **У вас нет понимонов из ранга [{item[3][1]}].**\n'
 
             else:
                 text += f'❌ **Вы не обладаете [{item[2]}].**\n' 
@@ -735,7 +818,7 @@ class Economics(commands.Cog):
 
         embed = disnake.Embed(
             description=text
-            ).set_footer(text='Покемоны продаются за 75% от стоимости')
+            ).set_footer(text='Понимоны продаются за 75% от стоимости')
         
         await ctx.send(embed=embed)
     
@@ -753,14 +836,70 @@ class Economics(commands.Cog):
             return  
         
         slotID = slot.split('-')[1]
-        embed = disnake.Embed(description=f'### Вы установили покемона на работу в {slotID} слот')
+        embed = disnake.Embed(description=f'### Вы установили понимона на работу в {slotID} слот')
         check = await setWorkPokemon(rankCOM=rareCOM, user=int(user), slot=int(slotID))
 
-        if not check: await inter.response.send_message(ephemeral=True, content='Только уникальные виды покемонов.\nЛибо вы можете переназначить уже работающего, на более продуктивного.')
+        if not check: await inter.response.send_message(ephemeral=True, content='Только уникальные виды понимонов.\nЛибо вы можете переназначить уже работающего, на более продуктивного.')
         else: await inter.response.edit_message(embed=embed, components=None)
 
-    @commands.command(name='setpokework', aliases=['датьроботу', 'упрячь', 'поставить', 'spw'])
+    @commands.Cog.listener('on_button_click')
+    async def unqueWorkGroup(self, inter: disnake.MessageInteraction):
+        trustList = ['unqueWG-1', 'unqueWG-2', 'unqueWG-3']
+        for item in trustList:
+            if inter.component.custom_id.startswith(item): break
+        else: return
+
+        comm, user = inter.component.custom_id.split('|')
+        _, slot = comm.split('-')
+
+        if int(user) != inter.author.id: 
+            await inter.response.defer()
+            return
+        
+        workGroup, cashincome = await getWorkPokemon(user=inter.author.id, sys=False)
+        workGroup[f'SLOT{comm[-1]}'] = None
+        
+        await saveWorkFile(workfile=workGroup, user=inter.author.id)
+        await inter.response.edit_message(embed=disnake.Embed(description=f'**Слот {slot} был освобожден.**'), components=None)
+
+    @commands.command(name='setpokework', aliases=['датьроботу', 'упрячь', 'spw'])
     async def setpokework(self, ctx):
+
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='setpokework')
+            return
+        else: del userEnter
+
+        checkFight = await checkInFightStatus(uid=ctx.author.id)
+        if checkFight:
+            await ctx.send(embed=disnake.Embed(description='**Ой! Похоже вы находитесь в бою!**\n**Во время боя нельзя изменять рабочую группу.**'))
+            return
+
+        enterMessage = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        if enterMessage in ['-', 'убрать', 'unque', 'unq']:
+                buttons = [
+                    disnake.ui.Button(style=disnake.ButtonStyle.gray, label='1', custom_id=f'unqueWG-1|{ctx.author.id}'),
+                    disnake.ui.Button(style=disnake.ButtonStyle.gray, label='2', custom_id=f'unqueWG-2|{ctx.author.id}'),
+                    disnake.ui.Button(style=disnake.ButtonStyle.gray, label='3', custom_id=f'unqueWG-3|{ctx.author.id}')
+                ]
+                slots, cashincome = await getWorkPokemon(user=ctx.author.id, sys=False)
+                
+                text = ''
+                NoneSlot = 0
+
+                for index, item in enumerate(slots):
+                    if slots[item] is None:
+                        text += f'**`{index+1}:` `Пустой слот.`**\n'
+                        NoneSlot += 1
+                    else:
+                        text += f'**`{index+1}:` `{slots[item]['name']}`**\n'
+                
+                if NoneSlot == 3: await ctx.send(embed=disnake.Embed(title='Кого желаете снять?', description='**Упси-дупси!**\n**Рабочая группа пуста.**'))
+                else: await ctx.send(embed=disnake.Embed(description=text), components=buttons)
+                return
+
         # Проверка значения
         try: 
             # Введенные данные от пользователя
@@ -772,7 +911,7 @@ class Economics(commands.Cog):
         except:
             print(enterMessage)
             # Исключение извещающее о отсутствии покемона или ошибке 
-            embed = disnake.Embed(description='**Не указано имя покемона или его ID**') 
+            embed = disnake.Embed(description='**Не указано имя понимона или его ID**') 
             await ctx.send(embed=embed)
             return
         
@@ -781,7 +920,7 @@ class Economics(commands.Cog):
         try:
             poke = userBag[ids]
         except:
-            embed = disnake.Embed(description='**Вы не обладаете данным покемоном**') 
+            embed = disnake.Embed(description='**Вы не обладаете данным понимоном**') 
             await ctx.send(embed=embed)
             return
         
@@ -803,14 +942,14 @@ class Economics(commands.Cog):
             text += f'\n\n-# Нажмите на кнопку, для завершения'
 
         embed = disnake.Embed(
-            title='На какое место желаете посадить покемона?',
+            title='На какое место желаете посадить понимона?',
             description=text,
             colour=disnake.Colour.fuchsia()
             )
         embed.set_footer(text=f'Вызвал: {ctx.author.name}. ')
 
         if foundPoke['rank'] == '?':
-            embed = disnake.Embed(description='Покемонов ранга [?] нельзя использовать для работы.')
+            embed = disnake.Embed(description='Понимонов ранга [?] нельзя использовать для работы.')
             await ctx.send(embed=embed)
             return
         
@@ -820,7 +959,7 @@ class Economics(commands.Cog):
         #     disnake.ui.Button(style=disnake.ButtonStyle.gray, label='3', custom_id=f'slot_3|{pokeID}|{ctx.author.id}')
         #     ]
 
-        text = 'Учтите, что пока покемон работает, его нельзя отправить сражаться.'
+        text = 'Учтите, что пока понимон работает, его нельзя отправить сражаться.'
         embed = disnake.Embed(
             title='Кого вы бы хотели отправить работать?',
             description=text
@@ -839,17 +978,24 @@ class Economics(commands.Cog):
 
         await ctx.send(embed=embed, view=view)
 
-    @commands.command(name='lookdivpoke', aliases=['pokediv', 'осмотрпокемонов', 'осмотрработы', 'ld', 'покеработа'])
+    @commands.command(name='lookdivpoke', aliases=['pokediv', 'рабочие', 'ld'])
     async def lookDivPoke(self, ctx):
         
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='lookdivpoke')
+            return
+        else: del userEnter
+
         workPoke, cashIncome = await getWorkPokemon(user=ctx.author.id, sys=False)
         text = ''
         for index, item in enumerate(workPoke):
+            if not workPoke[item]:
+                text += f'### ** `{index+1}`: `Пустой слот`**\n| <None>\n'
+                continue
             timeStruct = time.gmtime(round(time.time())-workPoke[item]['time'])
             times = time.strftime(f'{timeStruct[2]-1}:%H:%M:%S', timeStruct)
-            if not workPoke[item]:
-                text += f'### ** `{index+1}`: `Пустой слот`**\n| —\n'
-                continue
             income = cashIncome[item]
             text += f'### **`{index+1}`**: **`{income['name']}`** **`({workPoke[item]['cashIncome']:,}/h)`**\n| Собрано: `({income['income']})`\n| С последнего сбора: `({times})`\n'
         else:
@@ -864,6 +1010,14 @@ class Economics(commands.Cog):
 
     @commands.command(name='look', aliases=['l', 'осмотр'])
     async def look(self, ctx):
+
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='look')
+            return
+        else: del userEnter
+
         # TODO: Сделать дополнительную возможность на просмотр навыков, характеристик и эффектов
         try:
             name = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
@@ -887,8 +1041,8 @@ class Economics(commands.Cog):
             def sizeStat(stat):
                 return (foundPoke['params'][stat][0]+foundPoke['params'][stat][1])/2
 
-            priceText = f'**`Ценообразование:`**\n- Цена от _`{foundPoke['price'][0]:,}(es)`_ до _`{foundPoke['price'][1]:,}(es)`_\n- Доход от _`{foundPoke['income'][0]:,}(es/h)`_ до _`{foundPoke['income'][1]:,}(es/h)`_'
-            pokeStats = f'**`Характиристики (среднее):`**\n- Здоровье: {sizeStat('healpoint'):.0f} ({sizeStat('regen'):.0f}/h)\n- Атака: {sizeStat('attack'):.0f}\n- Броня: {sizeStat('armor'):.0%}\n- Уклонение: ({sizeStat('evasion'):.0%})\n- Скорость: {1/foundPoke['params']['speed'][1]:.1f}x-{1/foundPoke['params']['speed'][0]:.1f}x'
+            priceText = f'**`Ценообразование:`**\n- 💵 Цена от _`{foundPoke['price'][0]:,}(es)`_ до _`{foundPoke['price'][1]:,}(es)`_\n- 💹 Доход от _`{foundPoke['income'][0]:,}(es/h)`_ до _`{foundPoke['income'][1]:,}(es/h)`_'
+            pokeStats = f'**`Характиристики (среднее):`**\n- 💖 Здоровье: {sizeStat('healpoint'):.0f} ({sizeStat('regen'):.0f}/h)\n- 🔪 Атака: {sizeStat('attack'):.0f}\n- 🛡 Броня: {sizeStat('armor'):.0%}\n- 🦋 Уклонение: ({sizeStat('evasion'):.0%})\n- 🍃 Скорость: {1/foundPoke['params']['speed'][1]:.1f}x-{1/foundPoke['params']['speed'][0]:.1f}x'
 
             embed = disnake.Embed(
                 title=f'[{foundPoke['name']}]|[ID:{rare}]|[Rare:{foundPoke['rank']}]',
@@ -913,6 +1067,8 @@ class Economics(commands.Cog):
                 stat_list = json.load(file)
 
             mess = stat_list[f'{inter.message.id}']
+            if mess['author'] != inter.author.id:
+                return await inter.response.send_message(embed=disnake.Embed(description='**Вы не являетесь автором взаимодействия.**'), ephemeral=True)
 
             if mess['author'] != inter.author.id:
                 await inter.response.send_message('`Отказано в доступе. Вы не являетесь автором вызова.`', ephemeral=True)
@@ -937,20 +1093,25 @@ class Economics(commands.Cog):
             
             with open('../PonyashkaDiscord/config/lookBags.json', mode='w', encoding='UTF-8', ) as file:
                 file.write(json.dumps(stat_list, indent=3, ensure_ascii=False))
-        except:
+        except TypeError:
             embed = disnake.Embed(title='Информация',description='```Активно иное окно.```')
             await inter.response.edit_message(embed=embed, components=None)
 
-    @commands.command(name='lookbag', aliases=['lb', 'петы', 'покемоны', 'poke'])
+    @commands.command(name='lookbag', aliases=['lb', 'петы', 'понимоны', 'poke'])
     async def lookBag(self, ctx):
+
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='lookbag')
+            return
+        else: del userEnter
 
         name = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
         name = name.split('GOOD')
 
         try: names, seq = name[0].split('=')
         except: names = name[0] 
-
-        print(names)
 
         PokeID = await findID_PokemonInDB_LikeName(PokemonName=names)
         if name == ctx.message.content.split(' ')[0] or PokeID is None:
@@ -967,20 +1128,25 @@ class Economics(commands.Cog):
 
             pokesEXPneed = pokesToNextLvLExp(rank=poke['rank'], lvl=poke['other_param']['lvl'])
 
-            lvls = ''
-            tump = ''
 
-            if pokesEXPneed <= poke['other_param']['exp']: 
-                tump = ' **(N-UP)**'
-            if int(poke['other_param']['lvl']) >= 25: 
-                lvls = ' **(MAX)**'
-                tump = ' **(MAX)**'
+            tump = ' **(N-UP)**' if pokesEXPneed <= poke['other_param']['exp'] else ''
+            lvls = ' **(MAX)**' if int(poke['other_param']['lvl']) >= 25 else ''
+            tump = ' **(MAX)**' if int(poke['other_param']['lvl']) >= 25 else ''
+            maxSup = '**MAX**' if poke['rank'] in ['S', 'EX'] and poke['other_param']['supports'] == rrNeedSUP(poke['rank']) else ''
+            maxARM = '**(MAX)**' if poke['params']['armor'] >= 0.8 else ''
+            maxEVN = '**(MAX)**' if poke['params']['evasion'] >= 0.8 else ''
+            
+            soul = '`Низший`'
+            if poke['other_param']['countMemorySoul'] == 1: soul = '`Возвышенный`'
+            elif poke['other_param']['countMemorySoul'] == 2: soul = '`Первозданный`'
+            elif poke['other_param']['countMemorySoul'] == 3: soul = '`Познавший`'
+            elif poke['other_param']['countMemorySoul'] == 4: soul = '`Путь 12-ти`'
 
-            mainInfo = f'**`Основное`**\n- Ранг: `[{poke['rank']}]`\n- Уровень: `[{poke['other_param']['lvl']}]`{lvls}\n- Опыт: `[{poke['other_param']['exp']:,}/{pokesEXPneed:,}]`{tump}\n- Поддержек: `[{poke['other_param']['supports']}]`\n- Усиление от поддержек: `[{poke['other_param']['supports_percent_up']:.0%}]`'
+            mainInfo = f'**`Основное`**\n- 🔰 Ранг: `[{poke['rank']}]`\n- 📓 Дух: {soul}\n- 🎚 Уровень: `[{poke['other_param']['lvl']}]`{lvls}\n- 🎇 Опыт: `[{poke['other_param']['exp']:,}/{pokesEXPneed:,}]`{tump}\n- 🎎 Поддержек: `[{poke['other_param']['supports']}]` {maxSup}\n- Усиление от поддержек: `[{poke['other_param']['supports_percent_up']:.0%}]`'
 
-            priceText = f'**`Ценообразование:`**\n- Цена: `{poke['curr']['price']:,}(es)`\n- Доход: `{poke['curr']['income']:,}(es/h)`'
+            priceText = f'**`Ценообразование:`**\n- 💵 Цена: `{poke['curr']['price']:,}(es)`\n- 💹 Доход: `{poke['curr']['income']:,}(es/h)`'
 
-            pokeStats = f'**`Характиристики:`**\n- Здоровье: `[{poke['other_param']['healpoint_now']}/{poke['params']['healpoint']:.0f}]`\n- Регенерация: `[{poke['params']['regen']:.0f}]/h`\n- Атака: `[{poke['params']['attack']:.0f}]` (±20%)\n- Броня: `[{poke['params']['armor']:.0%}]`\n- Уклонение: `[{poke['params']['evasion']:.0%}]`\n- Скорость: `[{1/poke['params']['speed']:.1f}x]`'
+            pokeStats = f'**`Характиристики:`**\n- 💖 Здоровье: `[{poke['other_param']['healpoint_now']}/{poke['params']['healpoint']:.0f}]`\n- 💞 Регенерация: `[{poke['params']['regen']:.0f}]/h`\n- 🔪 Атака: `[{poke['params']['attack']:.0f}]` (±20%)\n- 🛡 Броня: `[{poke['params']['armor']:.0%}]` {maxARM}\n- 🦋 Уклонение: `[{poke['params']['evasion']:.0%}]` {maxEVN}\n- 🍃 Скорость: `[{1/poke['params']['speed']:.1f}x]`'
 
             text = f'{mainInfo}\n\n{priceText}\n\n{pokeStats}'
             embed = disnake.Embed(
@@ -994,7 +1160,7 @@ class Economics(commands.Cog):
 
         try: pokes = userBag[PokeID]
         except:
-            await ctx.send(embed=disnake.Embed(description='**Похоже вы не обладаете данным типом покемонов**'))
+            await ctx.send(embed=disnake.Embed(description='**Похоже вы не обладаете данным типом понимонов**'))
             return
         listsEmbed = {}
 
@@ -1006,7 +1172,7 @@ class Economics(commands.Cog):
             ran = 0
             for item in chu:
                 pok = HPupdate(pokes[item], ctx.author.id)
-                text += f'**- - (Seq: {item})**| Уровень: `[{pok['other_param']['lvl']}]`|`[{pok['other_param']['exp']}/{pokesToNextLvLExp(rank=pok['rank'], lvl=pok['other_param']['lvl'])}]`\n| Здоровье: `[{pok['other_param']['healpoint_now']}/{pok['params']['healpoint']:.0f}]`\n| Поддержек: `[{pok['other_param']['supports']}]`\n'
+                text += f'**- - (Seq: {item})**| 🔰 Уровень: `[{pok['other_param']['lvl']}]`|`[{pok['other_param']['exp']}/{pokesToNextLvLExp(rank=pok['rank'], lvl=pok['other_param']['lvl'])}]`\n| 💖 Здоровье: `[{pok['other_param']['healpoint_now']}/{pok['params']['healpoint']:.0f}]`\n| 🎎 Поддержек: `[{pok['other_param']['supports']}]`\n'
                 ran += 1
                 if ran == 5: break
             listsEmbed[f"{i+1}"] = {
@@ -1022,7 +1188,30 @@ class Economics(commands.Cog):
                 ]
         else: buttons = None
 
+        with open('../PonyashkaDiscord/config/lookBags.json', encoding='UTF-8') as file:
+            stat_list = json.load(file)
+
         message = await ctx.send(embed=disnake.Embed.from_dict(listsEmbed['1']), components=buttons)
+
+        to_dell = []
+        for item in stat_list:
+            if stat_list[item]['author'] == ctx.author.id:
+                msg = await self.bot.get_guild(ctx.guild.id).get_channel(ctx.message.channel.id).fetch_message(item)
+                await msg.edit(embed=disnake.Embed(description='**Было вызвано иное окно.**'), components=None)
+                to_dell.append(item)
+        else:
+            for dell in to_dell:
+                del stat_list[dell]
+
+        stat_list[message.id] = {
+            'author':ctx.author.id,
+            'index':1,
+            'embeds':listsEmbed
+        }
+
+        with open('../PonyashkaDiscord/config/lookBags.json', mode='w', encoding='UTF-8', ) as file:
+            file.write(json.dumps(stat_list, indent=3, ensure_ascii=False))
+
         
         await closeEmbedMessageAfter(message, time=60)
 
@@ -1034,6 +1223,17 @@ class Economics(commands.Cog):
             if inter.component.custom_id.startswith(item): break
         else: return
         comm, user, user2, interact = inter.component.custom_id.split('|')
+
+        if inter.author.id != int(user) and inter.author.id != int(user2):
+            return await inter.response.defer()
+        if inter.author.id != int(user2) and inter.author.id != int(user):
+            return await inter.response.defer()
+
+
+        checkFight = await checkInFightStatus(uid=inter.author.id)
+        if checkFight:
+            await inter.response.edit_message(embed=disnake.Embed(description='**Ой! Похоже вы находитесь в бою!**\n**Во время боя нельзя начинать другой бой.**'), components=None)
+            return
 
         try:
             users = f'{user}-{user2}'
@@ -1064,8 +1264,15 @@ class Economics(commands.Cog):
             return
         await inter.response.defer()
 
-    @commands.command(name='fightpoke', aliases=['fip', 'сражение', 'боп'])
+    @commands.command(name='fightpoke', aliases=['fip', 'сражение', 'бой'])
     async def fightPoke(self, ctx: disnake.ext.commands.Context):
+
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='fightpoke')
+            return
+        else: del userEnter
 
         checkFight = await checkInFightStatus(uid=ctx.author.id)
         if checkFight:
@@ -1076,12 +1283,12 @@ class Economics(commands.Cog):
         try:
             opponent = ctx.message.mentions[0]
         except:
-            embed = disnake.Embed(description='Не выбран соперник, упомяните его после команды.')
+            embed = disnake.Embed(description='**Не выбран соперник, упомяните его после команды.**')
             await ctx.send(embed=embed)
             return
 
         if opponent.id == ctx.author.id:
-            embed = disnake.Embed(description='Ты не можешь сразиться сам с собой.')
+            embed = disnake.Embed(description='**Ты не можешь сразиться сам с собой.**')
             await ctx.send(embed=embed)
             return
 
@@ -1101,27 +1308,101 @@ class Economics(commands.Cog):
                 embed = disnake.Embed(description='**У вызванного пользователя не организована боевая группа.**')
                 await ctx.send(embed=embed)
                 return
-
-        countUserPokeFught = 0
-        countOpponentPokeFight = 0
-        for item in loadPokeUser:
-            pass
+            
 
 
         #! Потом удалить
         userBag = await giveUserBag(user=ctx.author.id)
+        oppenentBag = await giveUserBag(user=opponent.id)
 
+        # Для пулла выборки бота
+        userPoke = []
+        for item in loadPokeUser:
+            if not loadPokeUser[item]: continue
+            
+            ids, seq = loadPokeUser[item].split('-')
+            if await checkHavePoke(ctx.author.id, ids, seq): continue
+            poke = HPupdate(userBag[ids][seq], ctx.author.id)
+            hpPoke = round(poke['params']['healpoint'] * 0.5)
 
-        # TODO: Исключить возможность поняшки выбирать, выбранные игроком покемонов, и повторять выбор
+            if hpPoke >= round(poke['other_param']['healpoint_now']): 
+                # ? Потом вернуть отсылание к справке про справедливый бой
+                return await ctx.send(embed=disnake.Embed(description=f'**Один из ваших понимонов ещё не достаточно восстановился.**\n## >> {poke['name']}\n\n`[{poke['other_param']['healpoint_now']}/{poke['params']['healpoint']}] >> [{(poke['other_param']['healpoint_now']/poke['params']['healpoint']):.1%} < 50% HP]`'))
+            else: userPoke.append(loadPokeUser[item])
 
+        
+        # Создание пулла покемонов для бота, с фильтром.
+        # Критерии: Уникальность, честность.
         if opponent.bot:
+            taxBotCheckindList = []
             randomPoke = []
-            for index in range(3):
-                ids = choice(list(userBag.keys()))
-                pok = userBag[ids][choice(list(userBag[ids].keys()))]
-                randomPoke.append(pok)
+            selectedPokesUserBag = copy.deepcopy(userBag)
 
-        if opponent.bot: 
+            randomOpp = random.randint(len(userPoke), 3)
+
+            while True:
+                if len(taxBotCheckindList) == randomOpp:
+                    break
+                if len(selectedPokesUserBag) == 0 and (len(randomPoke) == len(userPoke)):
+                    break
+                if len(selectedPokesUserBag) == 0: 
+                    return await ctx.send(embed=disnake.Embed(description='**Поняшка не смогла собрать группу для боя с вами. Похоже вам не хватает понимонов, для честной игры.**'))
+                
+                
+                # Рандомизация выборпа поняшки
+                ids = choice(list(selectedPokesUserBag.keys()))
+                try: seq = choice(list(selectedPokesUserBag[ids].keys()))
+                except: 
+                    if len(selectedPokesUserBag[ids]) == 0: del selectedPokesUserBag[ids]
+                    continue
+
+                def dell(e):
+                    del e[ids][seq]
+                    if len(e[ids]) == 0: del e[ids]
+                    return e
+
+                lookPoke = HPupdate(selectedPokesUserBag[ids][seq], ctx.author.id)
+
+                # print(f'{lookPoke['name']} = {lookPoke['other_param']['healpoint_now']} / {lookPoke['params']['healpoint']} (lenSPUB= {len(selectedPokesUserBag)})')
+                
+                # Список для последующей проверки на честность
+                params = lookPoke['params']
+                curr = lookPoke['curr']
+                other_params = lookPoke['other_param']
+                # Блок с проверкой на малый показатель
+                if params['attack'] == 0: 
+                    selectedPokesUserBag = dell(selectedPokesUserBag)
+                    continue
+                if params['healpoint'] == 1: 
+                    selectedPokesUserBag = dell(selectedPokesUserBag)
+                    continue
+                if params['regen'] == 0: 
+                    selectedPokesUserBag = dell(selectedPokesUserBag)
+                    continue
+
+                # Блок с проверкой неготовностью понимона по хп
+                if other_params['healpoint_now'] <= round(params['healpoint'] * 0.5): 
+                    selectedPokesUserBag = dell(selectedPokesUserBag)
+                    continue
+
+                taxCheck = f'{ids}-{seq}'
+                # Проверка на уникальность
+                if (taxCheck not in userPoke) and (taxCheck not in taxBotCheckindList):
+                    pok = userBag[ids][seq]
+
+                    taxBotCheckindList.append(taxCheck)
+                    randomPoke.append(pok)
+
+                else:
+                    selectedPokesUserBag = dell(selectedPokesUserBag)
+        
+            # Если не подходит критериям
+            if len(randomPoke) <  len(userPoke): return await ctx.send(embed=disnake.Embed(description='**Недостаточно понимонов для честного боя.**\n**Поняшка не смогла выбрать понимонов, по критериям честного боя.**').set_footer(text='**Понимонов было выбрано меньше, чем у пользователя.**'))
+
+            randomPokeMap = {"slot1":None, "slot2":None, "slot3":None}
+            for index, item in enumerate(randomPoke):
+                randomPokeMap[f'slot{index+1}'] = item
+
             fightMap = {
                 "p1":{
                     "idp":ctx.author.id,
@@ -1142,13 +1423,31 @@ class Economics(commands.Cog):
                     "bot":opponent.bot,
 
                     "pokemons":{
-                        'slot1':randomPoke[0],
-                        'slot2':randomPoke[1],
-                        'slot3':randomPoke[2]
+                        'slot1':randomPokeMap['slot1'],
+                        'slot2':randomPokeMap['slot2'],
+                        'slot3':randomPokeMap['slot3']
                         }
                     }            
                 }
+            
         else:
+            for item in loadPokeOppenent:
+                if not loadPokeOppenent[item]: continue
+                
+                ids, seq = loadPokeOppenent[item].split('-')
+
+                try: opponentPokemon = oppenentBag[ids][seq]
+                except: 
+                    loadPokeOppenent[item] = None
+                    await saveFightGroup(rankCOM=None, user=ctx.author.id, slot=item[-1])
+                    continue 
+
+                poke = HPupdate(opponentPokemon, opponent.id)
+                hpPoke = round(poke['params']['healpoint'] * 0.5)
+
+                # ? Потом вернуть отсылание на справедливый бой
+                if hpPoke >= round(poke['other_param']['healpoint_now']): return await ctx.send(embed=disnake.Embed(description=f'**Один из понимонов соперника ещё не достаточно восстановился.**\n## >> {poke['name']}\n\n`[{poke['other_param']['healpoint_now']}/{poke['params']['healpoint']}] >> [{(poke['other_param']['healpoint_now']/poke['params']['healpoint']):.1%} < 50% HP]`'))
+
             fightMap = {
                 "p1":{
                     "idp":ctx.author.id,
@@ -1196,7 +1495,7 @@ class Economics(commands.Cog):
         
         #TODO: Позже подумать о подключении конфигурационных файлов
         if NoneCount == 3:
-            embed = disnake.Embed(description='**Ваша боевая группа не содержит боевых покемонов.**')
+            embed = disnake.Embed(description='**Ваша боевая группа не содержит боевых понимонов.**')
             await ctx.send(embed=embed)
             return
         
@@ -1230,22 +1529,22 @@ class Economics(commands.Cog):
                     FGP2 += f'| **`[ None ]`**\n'
         
         if NoneCount == 3:
-            embed = disnake.Embed(description='**Боевая группа опонента не содержит боевых покемонов в составе.**')
+            embed = disnake.Embed(description='**Боевая группа опонента не содержит боевых понимонов в составе.**')
             await ctx.send(embed=embed)
             return
         
         # PreStart call to accept fight
-        text = f'## Готовы ли игроки к бою?\n### Первый игрок (БМ: {summCP1}): \n**[P1]** — `{ctx.author.name}`\n{FGP1}'
+        text = f'## Готовы ли игроки к бою?\n### Первый игрок (БМ: {reduct(summCP1)}): \n**[P1]** — `{ctx.author.name}`\n{FGP1}'
         buttonsPlayer = [
             disnake.ui.Button(style=disnake.ButtonStyle.red, label=f'P1', custom_id=f'fip1|{ctx.author.id}|{opponent.id}|{ctx.author.id}'),
             ]
         
         if opponent.bot:
             buttonsPlayer.append(disnake.ui.Button(style=disnake.ButtonStyle.green, label=f'P2', custom_id=f'fip2|{ctx.author.id}|{opponent.id}|{opponent.id}', disabled=True))
-            text += f'### Второй игрок (БМ: {summCP2}): \n**[БОТ]|[P2]** — `{opponent.name}`\n{FGP2}'
+            text += f'### Второй игрок (БМ: {reduct(summCP2)}): \n**[БОТ]|[P2]** — `{opponent.name}`\n{FGP2}'
         else:
             buttonsPlayer.append(disnake.ui.Button(style=disnake.ButtonStyle.red, label=f'P2', custom_id=f'fip2|{ctx.author.id}|{opponent.id}|{opponent.id}'))
-            text += f'### Второй игрок (БМ: {summCP2}): \n**[P2]** — `{opponent.name}`\n{FGP2}'
+            text += f'### Второй игрок (БМ: {reduct(summCP2)}): \n**[P2]** — `{opponent.name}`\n{FGP2}'
 
         embed = disnake.Embed(description=text)
         
@@ -1258,8 +1557,7 @@ class Economics(commands.Cog):
         except:
             with open(f'../PonyashkaDiscord/content/lotery/fight/{ctx.author.id}-{opponent.id}.json', 'w', encoding='utf-8') as file:
                 file.write(json.dumps(fightMap, indent=3, ensure_ascii=False))
-            
-        
+
         await ctx.send(embed=embed, components=buttonsPlayer)
 
     @commands.Cog.listener('on_button_click')
@@ -1272,45 +1570,160 @@ class Economics(commands.Cog):
         comm, rankCOM, user = inter.component.custom_id.split('|')
         _, slot = comm.split('-')
         ids, seq = rankCOM.split('-')
-        userBag = (await giveUserBag(int(user)))[ids][seq]
 
         if int(user) != inter.author.id: 
             await inter.response.defer()
             return
         
+        userBag = (await giveUserBag(int(user)))[ids][seq]
+        fightGroup = await takeFightGroup(inter.author.id)
+        tems = []
+        for items in fightGroup:
+            if not fightGroup[items]: continue
+            f_ids, f_seq = fightGroup[items].split('-')
+            tems.append((f_ids, f_seq))
+
+        for t in tems:
+            if t[0] == ids and t[1] == seq:
+                await inter.response.send_message('Только уникальные понимоны. Нельзя поставить одного и того же.', ephemeral=True)
+                return
+
         await saveFightGroup(user=user, rankCOM=rankCOM, slot=slot)
-        embed = disnake.Embed(description=f'**Покемон [{userBag['name']}] был установлен в {slot} слот**')
+        embed = disnake.Embed(description=f'**Понимон [{userBag['name']}] был установлен в {slot} слот**')
 
         await inter.response.edit_message(embed=embed, components=None)
 
-    @commands.command(name='setfightgroup', aliases=['sfg', 'угу', 'установкабоеваягруппа'])
+    @commands.Cog.listener('on_button_click')
+    async def unqueFightGroup(self, inter: disnake.MessageInteraction):
+        trustList = ['unqueFG-1', 'unqueFG-2', 'unqueFG-3']
+        for item in trustList:
+            if inter.component.custom_id.startswith(item): break
+        else: return
+
+        comm, user = inter.component.custom_id.split('|')
+        _, slot = comm.split('-')
+
+        if int(user) != inter.author.id: 
+            await inter.response.defer()
+            return
+        
+        await saveFightGroup(user=user, rankCOM=None, slot=slot)
+        await inter.response.edit_message(embed=disnake.Embed(description=f'**Слот {slot} был освобожден.**'), components=None)
+
+    @commands.command(name='setfightgroup', aliases=['sfg', 'бойки', 'боевые'])
     async def setFightGroup(self, ctx):
         
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='setfightgroup')
+            return
+        else: del userEnter
+
         checkFight = await checkInFightStatus(uid=ctx.author.id)
         if checkFight:
             await ctx.send(embed=disnake.Embed(description='**Ой! Похоже вы находитесь в бою!**\n**Во время боя нельзя изменять боевую группу.**'))
             return
         
-
         # Проверка значения
         try: 
             # Введенные данные от пользователя
             enterMessage = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
 
-            try: 
-                # первая попытка поиска, через введенное имя покемона
-                foundPoke, rare = await findMap_PokemonInDB_LikeName(name=enterMessage)
+            if enterMessage in ['-', 'убрать', 'unque', 'unq']:
+                buttons = [
+                    disnake.ui.Button(style=disnake.ButtonStyle.gray, label='1', custom_id=f'unqueFG-1|{ctx.author.id}'),
+                    disnake.ui.Button(style=disnake.ButtonStyle.gray, label='2', custom_id=f'unqueFG-2|{ctx.author.id}'),
+                    disnake.ui.Button(style=disnake.ButtonStyle.gray, label='3', custom_id=f'unqueFG-3|{ctx.author.id}')
+                ]
+                slots = await takeFightGroup(user=ctx.author.id)
+                
+                text = ''
+                NoneSlot = 0
 
-            except: 
-                # Вторая попытка нахождения покемона через индитификатор покемона Rank-num
-                foundPoke = await findMap_PokemonInDB_LikeID(ID=enterMessage)
-                rare = enterMessage.split('-')
+                for index, item in enumerate(slots):
+                    if slots[item] is None:
+                        text += f'**`{index+1}:` `Пустой слот.`**\n'
+                        NoneSlot += 1
+                    else:
+                        localIds, localSeq = slots[item].split('-')
+                        try: localUserBag = (await giveUserBag(ctx.author.id))[localIds][localSeq]
+                        except:
+                            text += f'**`{index+1}:` `Пустой слот.`**\n| <None>\n'
+                            await saveFightGroup(rankCOM=None, user=ctx.author.id, slot=item[-1])
+                            NoneSlot += 1
+                            continue
+
+                        text += f'**`{index+1}:` `{localUserBag['name']}` `({localUserBag['other_param']['lvl']}) lvl`**\n'
+                
+                if NoneSlot == 3: await ctx.send(embed=disnake.Embed(description='**Упси-дупси!**\n**Боевая группа пуста.**'))
+                else: await ctx.send(embed=disnake.Embed(description=text), components=buttons)
+                return
+
+            try: 
+                name, seq = enterMessage.split('=')
+                ids = await findID_PokemonInDB_LikeName(PokemonName=name)
+                if ids is None: ids = name
+                
+                #? Попытка прочесать по seq/ids
+                try: 
+                # первая попытка поиска, через введенное имя покемона
+                    foundPoke, ids_inDB = await findMap_PokemonInDB_LikeName(name=ids)
+                except: 
+                    # Вторая попытка нахождения покемона через индитификатор покемона Rank-num
+                    foundPoke = await findMap_PokemonInDB_LikeID(ID=ids)
+                    ids_inDB = enterMessage
+
+                try: 
+                    userBag = await giveUserBag(ctx.author.id)
+                    poke = HPupdate(userBag[ids][seq], ctx.author.id)
+
+                    buttons = [
+                            disnake.ui.Button(style=disnake.ButtonStyle.gray, label='1', custom_id=f'selectFightSlot-1|{ids}-{seq}|{ctx.author.id}'),
+                            disnake.ui.Button(style=disnake.ButtonStyle.gray, label='2', custom_id=f'selectFightSlot-2|{ids}-{seq}|{ctx.author.id}'),
+                            disnake.ui.Button(style=disnake.ButtonStyle.gray, label='3', custom_id=f'selectFightSlot-3|{ids}-{seq}|{ctx.author.id}')
+                        ]
+                    params = poke['params']
+                    pokes = f'**`>>` `{poke['name']}` `({poke['other_param']['lvl']}) lvl`**\n| 💖 Здоровье: `[{params['healpoint']:,}]` `[{params['regen']}/h]`\n| 🔪 Атака: `[{params['attack']:,}]`\n| 🛡 Процент защиты: `[{params['armor']:.0%}]`\n| 🦋 Шанс уклонения: `[{params['evasion']:.0%}]`\n| 🍃 Скорость: `[{(1/params['speed']):.0%}]`\n'
+
+                    slots = await takeFightGroup(user=ctx.author.id)
+                    text = ''
+                    for index, item in enumerate(slots):
+                        if slots[item] is None:
+                            text += f'**`{index+1}:` `Пустой слот.`**\n| <None>\n'
+                        else:
+                            localIds, localSeq = slots[item].split('-')
+                            try: localUserBag = (await giveUserBag(ctx.author.id))[localIds][localSeq]
+                            except:
+                                text += f'**`{index+1}:` `Пустой слот.`**\n| <None>\n'
+                                await saveFightGroup(rankCOM=None, user=ctx.author.id, slot=item[-1])
+                                continue
+                            localParams = localUserBag['params']
+
+                            text += f'**`{index+1}:` `{localUserBag['name']}` `({localUserBag['other_param']['lvl']}) lvl`**\n| 💖 Здоровье: `[{localParams['healpoint']:,}]` `[{localParams['regen']}/h]`\n| 🔪 Атака: `[{localParams['attack']:,}]`\n| 🛡 Процент защиты: `[{localParams['armor']:.0%}]`\n| 🦋 Шанс уклонения: `[{localParams['evasion']:.0%}]`\n| 🍃 Скорость: `[{(1/localParams['speed']):.0%}]`\n\n'
+
+                    embed = disnake.Embed(description=f'```Выбранный понимон:``` {pokes}\n```Слоты```\n{text}', colour=disnake.Colour.dark_red())
+                    await ctx.send(embed=embed, components=buttons)
+                    return
+
+
+                except: pass
+
+            except:
+                #? Попытка прочесать по seq/ids
+                try: 
+                # первая попытка поиска, через введенное имя покемона
+                    foundPoke, ids = await findMap_PokemonInDB_LikeName(name=enterMessage)
+                except: 
+                    # Вторая попытка нахождения покемона через индитификатор покемона Rank-num
+                    foundPoke = await findMap_PokemonInDB_LikeID(ID=enterMessage)
+                    ids = enterMessage
 
             # Получение данных о боевой группе пользователя
             fightPoke = await takeFightGroup(ctx.author.id)
         except:
             # Исключение извещающее о отсутствии покемона или ошибке 
-            embed = disnake.Embed(description='**Не указано имя покемона или его ID**') 
+            embed = disnake.Embed(description='**Не верно указано имя понимона или его ID**') 
             await ctx.send(embed=embed)
             return
 
@@ -1319,13 +1732,13 @@ class Economics(commands.Cog):
         # Наличие покемона у человека
         userBag = await giveUserBag(user=ctx.author.id)
         try:
-            poke = userBag[rare]
+            poke = userBag[ids]
         except:
-            embed = disnake.Embed(description='**Вы не обладаете данным покемоном**') 
+            embed = disnake.Embed(description='**Вы не обладаете данным понимоном**') 
             await ctx.send(embed=embed)
             return
         
-        text = '**Выберите покемона из списка, которого бы вы хотели установить в боевую группу**'
+        text = '**Выберите понимона из списка, которого бы вы хотели установить в боевую группу**'
         embed = disnake.Embed(description=text)
 
         options = []
@@ -1333,7 +1746,7 @@ class Economics(commands.Cog):
             options.append(
                 disnake.SelectOption(
                     label=f'({index+1}) {poke[item]['name']} ({poke[item]['params']['healpoint']}hp) ({poke[item]['params']['attack']}atk)',
-                    value=f'poke|{index}|{poke[item]['params']['healpoint']}-{poke[item]['params']['attack']}|{rare}-{item}'
+                    value=f'poke|{index}|{poke[item]['params']['healpoint']}-{poke[item]['params']['attack']}|{ids}-{item}'
                     )
                 )
         options.sort(key=lambda x: round((int(x.value.split('|')[2].split('-')[0]) + int(x.value.split('|')[2].split('-')[1]))/2), reverse=True)
@@ -1343,6 +1756,14 @@ class Economics(commands.Cog):
 
     @commands.command(name='lookfightgroup', aliases=['lfg', 'бгу', 'боеваягруппа'])
     async def lookFightGroup(self, ctx):
+
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            Until.helpedUser(ctx, info='lookfightgroup')
+            return
+        else: del userEnter
+
         slots = await takeFightGroup(user=ctx.author.id)
         text = ''
         for index, item in enumerate(slots):
@@ -1357,7 +1778,7 @@ class Economics(commands.Cog):
                     await saveFightGroup(rankCOM=None, user=ctx.author.id, slot=index+1)
                     continue
                 localParams = localUserBag['params']
-                text += f'### **`{index+1}:` `{localUserBag['name']}` `({localUserBag['other_param']['lvl']}) lvl`**\n| Здоровье: `[{localParams['healpoint']:,}]` `[{localParams['regen']}/h]`\n| Атака: `[{localParams['attack']:,}]`\n| Процент защиты: `[{localParams['armor']:.0%}]`\n| Шанс уклонения: `[{localParams['evasion']:.0%}]`\n| Скорость: `[{(1/localParams['speed']):.0%}]`\n'
+                text += f'### **`{index+1}:` `{localUserBag['name']}` `({localUserBag['other_param']['lvl']}) lvl`**\n| 💖 Здоровье: `[{localUserBag['other_param']['healpoint_now']}/{localParams['healpoint']:,}]` `[{localParams['regen']}/h]`\n| 🔪 Атака: `[{localParams['attack']:,}]`\n| 🛡 Процент защиты: `[{localParams['armor']:.0%}]`\n| 🦋 Шанс уклонения: `[{localParams['evasion']:.0%}]`\n| 🍃 Скорость: `[{(1/localParams['speed']):.0%}]`\n'
 
         embed = disnake.Embed(description=text, colour=disnake.Colour.dark_red())
         await ctx.send(embed=embed)
@@ -1365,43 +1786,97 @@ class Economics(commands.Cog):
     @commands.command(name='tradepoke', aliases=['trp', 'передать'])
     async def tradepoke(self, ctx):
         
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='tradepoke')
+            return
+        else: del userEnter
+
         checkFight = await checkInFightStatus(uid=ctx.author.id)
         if checkFight:
-            await ctx.send(embed=disnake.Embed(description='**Ой! Похоже вы находитесь в бою!**\n**Во время боя нельзя торговать понимонами.**'))
-            return
+            return await ctx.send(embed=disnake.Embed(description='**Ой! Похоже вы находитесь в бою!**\n**Во время боя нельзя торговать понимонами.**'))
 
-        try:
-            # Получение упоминания пользователя которому добавляется покемон
-            mentionedUser = ctx.message.mentions[0]
-        except:
-            ErrorEmbed = disnake.Embed(description='**Форма команды: !trp <пользователь> <покемон>**')
-            await ctx.send(embed=ErrorEmbed)
-            return
+        # Проверка на указание получателя покемона
+        try: mentionedUser = ctx.message.mentions[0]
+        except: return await ctx.send(embed=disnake.Embed(description='**Форма команды: !trp <пользователь> <понимон>**'))
 
-        try:
-            # Получение названия или ID покемона
-            sennedPokemon = ctx.message.content.split()[2]
-        except:
-            ErrorEmbed = disnake.Embed(description='**Форма команды: !trp <пользователь> <покемон>**')
-            await ctx.send(embed=ErrorEmbed)
-            return
-        
-        try:
-            try: 
-                    # первая попытка поиска, через введенное имя покемона
-                    foundPoke, rare = await findMap_PokemonInDB_LikeName(name=sennedPokemon)
-            except: 
-                # Вторая попытка нахождения покемона через индитификатор покемона Rank-num
-                foundPoke = await findMap_PokemonInDB_LikeID(ID=sennedPokemon)
-                rare = sennedPokemon.split('-')
-        except:
-            ErrorEmbed = disnake.Embed(description='**Возможно вы неверно указали либо ID покемона, либо название.**')
-            await ctx.send(embed=ErrorEmbed)
-            return
+        if mentionedUser.bot: return await ctx.send(embed=disnake.Embed(description='**Ботам нельзя передавать понимонов, только продавать.**'))
+        if mentionedUser.id == ctx.author.id: return await ctx.send(embed=disnake.Embed(description='**Нельзя передавать понимонов самому себе же.**'))
+
+        # Проверка на указание аргумента в виде покемона
+        try: 
+            sennedPokemon = str(ctx.message.content).replace(f'{ctx.message.content.split(' ')[0]} {ctx.message.content.split(' ')[1]} ', '')
+            try:
+                name, seq = sennedPokemon.split('=')
+                ids = await findID_PokemonInDB_LikeName(PokemonName=name)
+                if ids is None: ids = name
+
+                try:
+                    userBag1 = await giveUserBag(ctx.author.id)
+                    userBag2 = await giveUserBag(mentionedUser.id)
+
+                    if ids in userBag2:
+                        
+                        lids, lseq = (userBag1[ids][seq]['innerID']).split('-')
+
+                        if lseq in list(userBag2[ids].keys()):
+                            num = 1
+                            keysList = list(userBag2[ids].keys())
+                            while True:
+                                if num in keysList: 
+                                    num += 1
+                                    continue
+                                break
+                        
+                        pokesEntrade = copy.deepcopy(userBag1[ids][seq])
+                        del userBag1[ids][seq]
+
+                        pokesEntrade['owner'] = mentionedUser.id
+                        if mentionedUser.id not in pokesEntrade['holder']: pokesEntrade['holder'].append(mentionedUser.id)
+                        pokesEntrade['innerID'] = str(f'{ids}-{num}')
+                        pokesEntrade['other_param']['essence_drop'] += randint(1, 5)
+                        userBag2[ids][num] = pokesEntrade
+
+                        hardSaveBag(user=ctx.author.id, file=userBag1)
+                        hardSaveBag(user=mentionedUser.id, file=userBag2)
+
+                        embed= disnake.Embed(description=f'**Вы передали пользователю <@{mentionedUser.id}> понимона.**')
+                        return await ctx.send(embed=embed)
+                    else:
+                        pokesEntrade = copy.deepcopy(userBag1[ids][seq])
+
+                        pokesEntrade['owner'] = mentionedUser.id
+                        if mentionedUser.id not in pokesEntrade['holder']: pokesEntrade['holder'].append(mentionedUser.id)
+                        pokesEntrade['innerID'] = str(f'{ids}-1')
+
+                        del userBag1[ids][seq]
+                        if len(userBag1[ids]) == 0: del userBag1[ids]
+
+                        userBag2[f'{ids}'] = {
+                                '1':pokesEntrade
+                            }
+
+                        hardSaveBag(user=ctx.author.id, file=userBag1)
+                        hardSaveBag(user=mentionedUser.id, file=userBag2)
+
+                        embed = disnake.Embed(description=f'**Вы передали пользователю <@{mentionedUser.id}> понимона...**')
+                        return await ctx.send(embed=embed)
+                except: pass
+            except:
+                try: 
+                    mapPoke = await findMap_PokemonInDB_LikeID(ID=sennedPokemon)
+                    ids = sennedPokemon
+                except:
+                    ids = await findID_PokemonInDB_LikeName(PokemonName=sennedPokemon)
+                    if not ids: return await ctx.send(embed=disnake.Embed(description='**Неизвестный для системы понимон.**'))
+
+        except: 
+            return await ctx.send(embed=disnake.Embed(description='**Форма команды: !trp <пользователь> <понимон>**'))
 
         try:
             userPokemons = await giveUserBag(user=ctx.author.id)
-            SelectedPokes = userPokemons[rare]
+            SelectedPokes = userPokemons[ids]
         except:
             embed = disnake.Embed(description='**Упс, похоже вы не обладаете данным видом.**')
             await ctx.send(embed = embed)
@@ -1413,11 +1888,11 @@ class Economics(commands.Cog):
             options.append(
                 disnake.SelectOption(
                     label=f'({index+1}) {SelectedPokes[item]['name']} ({SelectedPokes[item]['curr']['income']}/h)',
-                    value=f'trade|{index+1}|{rare}-{item}|{ctx.author.id}-{mentionedUser.id}'
+                    value=f'trade|{index+1}|{ids}-{item}|{ctx.author.id}-{mentionedUser.id}'
                     )
                 )
 
-        embed = disnake.Embed(description=f'**Выберите покемона, которого вы хотели бы передать.**')
+        embed = disnake.Embed(description=f'**Выберите понимона, которого вы хотели бы передать.**')
 
         view = SelectMassPokemonsViewSelectPoke(options=options, user=ctx.author.id)
         await ctx.send(embed=embed, view=view)
@@ -1425,6 +1900,14 @@ class Economics(commands.Cog):
     # Покемонов можно продать не только в стоковом магазине, но и на аукционе, между игроками.
     @commands.command(name='bidding', aliases=['bid', 'аукцион', 'аук', 'торги'])
     async def bidding(self, ctx):
+        
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until.helpedUser(context=ctx, ctx=ctx, info='bidding')
+            return
+        else: del userEnter
+        
         '''
         1. Вопрос пользователю о том, что снимать с аукциона после продажного цикла(2 недели), или же продлять из кармана.
         Если пополнить не удалось, то лот снимается.
@@ -1433,7 +1916,7 @@ class Economics(commands.Cog):
         2. Аукцион автономен. Не требует подтверждения на передачу, работает как обычная покупка.
         3. 
         '''
-        pass
+        await ctx.send(embed=disnake.Embed(description='**В разработке. Ожидайте в ближайших обновлениях.**'))
 
     @commands.Cog.listener('on_button_click')
     async def supportEndSelect(self, inter:disnake.MessageInteraction):
@@ -1453,7 +1936,7 @@ class Economics(commands.Cog):
         oldPoke = copy.deepcopy(upPoke)
 
         mapedSuped = upPoke['other_param']['supports']
-        upRank = True if int(mapedSuped)+1 == 10 else False
+        upRank = True if int(mapedSuped)+1 == rrNeedSUP(upPoke['rank']) else False
 
         dids, dseq = did.split('-')
         diePoke = userBag[dids][dseq]
@@ -1461,88 +1944,110 @@ class Economics(commands.Cog):
         upPoke = HPupdate(upPoke, inter.author.id)
         diePoke = HPupdate(diePoke, inter.author.id)
 
-        maximus = ''
+        upPoke['other_param']['essence_drop'] += randint(5, 10)
+        maximusARM = ''
+        maximusENV = ''
         if comm == 'SUPATK':
             upPoke['params']['attack'] += round(diePoke['params']['attack'] * mapSup(str(mapedSuped)))
-            diePoke['params']['attack'] = 0
         if comm == 'SUPHP':
             upPoke['params']['healpoint'] += round(diePoke['params']['healpoint'] * mapSup(str(mapedSuped)))
-            diePoke['params']['healpoint'] = 1
         if comm == 'SUPDEF':
             upPoke['params']['armor'] += round(diePoke['params']['armor'] * mapSup(str(mapedSuped)), 3)
             if upPoke['params']['armor'] > 0.8:
                 upPoke['params']['armor'] = 0.8
-                maximus = 'MAX'
-            diePoke['params']['armor'] = 0
+                maximusARM = 'MAX'
         if comm == 'SUPEVN':
             upPoke['params']['evasion'] += round(diePoke['params']['evasion'] * mapSup(str(mapedSuped)), 3)
             if upPoke['params']['evasion'] > 0.8:
                 upPoke['params']['evasion'] = 0.8
-                maximus = 'MAX'
-            diePoke['params']['evasion'] = 0
+                maximusENV = 'MAX'
         if comm == 'SUPREG':
             upPoke['params']['regen'] += round(diePoke['params']['regen'] * mapSup(str(mapedSuped)))
-            diePoke['params']['regen'] = 0
 
         # Цена
         if comm == 'SUPPR':
             upPoke['curr']['price'] += round(diePoke['curr']['price'] * mapSup(str(mapedSuped)))
-            diePoke['curr']['price'] = 0
         # Доход
         if comm == 'SUPINC':
             upPoke['curr']['income'] += round(diePoke['curr']['income'] * mapSup(str(mapedSuped)))
-            diePoke['curr']['income'] = 0
         # Мощность
         if comm == 'SUPPINC':
             upPoke['curr']['power'] += round(diePoke['curr']['power'] * mapSup(str(mapedSuped)), 2)
-            diePoke['curr']['power'] = 0
 
         if upRank and upPoke['rank'] != 'S':
             upPoke['params']['attack'] = round(upPoke['params']['attack'] * (rankedBoost(upPoke['rank']))[0])
             upPoke['params']['healpoint'] = round(upPoke['params']['healpoint'] * (rankedBoost(upPoke['rank']))[0])
+            upPoke['params']['regen'] = round(upPoke['params']['regen'] * (rankedBoost(upPoke['rank']))[0])
 
             upPoke['params']['armor'] = round(upPoke['params']['armor'] * (rankedBoost(upPoke['rank']))[1], 2)
-            if upPoke['params']['armor'] > 0.8:
+            if upPoke['params']['armor'] >= 0.8:
                 upPoke['params']['armor'] = 0.8
-                maximus = 'MAX'
+                maximusARM = 'MAX'
             upPoke['params']['evasion'] = round(upPoke['params']['evasion'] * (rankedBoost(upPoke['rank']))[1], 2)
-            if upPoke['params']['evasion'] > 0.8:
+            if upPoke['params']['evasion'] >= 0.8:
                 upPoke['params']['evasion'] = 0.8
-                maximus = 'MAX'
+                maximusENV = 'MAX'
 
-            upPoke['params']['regen'] = round(upPoke['params']['regen'] * (rankedBoost(upPoke['rank']))[0])
             upPoke['curr']['price'] = round(upPoke['curr']['price'] * (rankedBoost(upPoke['rank']))[0])
             upPoke['curr']['income'] = round(upPoke['curr']['income'] * (rankedBoost(upPoke['rank']))[0])
-            upPoke['curr']['power'] = round(upPoke['curr']['power'] * (rankedBoost(upPoke['rank']))[0])
+            upPoke['curr']['power'] = round(upPoke['curr']['power'] * (rankedBoost(upPoke['rank']))[0], 2)
 
-            upPoke['rank'] = rrUped(upPoke['rank'])
+            upPoke['other_param']['exp'] = 0
+            upPoke['other_param']['lvl'] = 0
             
+            upPoke['rank'] = rrUped(upPoke['rank'])
+            upPoke['other_param']['essence_drop'] += randint(20, 50)
+        
+
+        
+
         text = f'### |[ {upPoke['name']} ]|\n'
         for item in upPoke['params']:
-            if upPoke['params'][item] != oldPoke['params'][item]: text += f'- **{await AllockatePokemons(item)}:** `[{oldPoke['params'][item]} -> {upPoke['params'][item]}]` {maximus}\n'
-        for item in upPoke['curr']:
-            if upPoke['curr'][item] != oldPoke['curr'][item]: text += f'- **{await AllockatePokemons(item)}:** `[{oldPoke['curr'][item]} -> {upPoke['curr'][item]}]`\n'
-        
-        
-        if upRank:
-            text += f'\nПокемон претерпел эволюцию: `[{oldPoke['rank']} -> {upPoke['rank']}]`\n'
+            if upPoke['params'][item] != oldPoke['params'][item]: 
 
-            upPoke['other_param']['supports'] = 0
-        else: upPoke['other_param']['supports'] += 1
+                oldParam = round(oldPoke['params'][item], 2) if item in ['evasion', 'armor'] else round(oldPoke['params'][item], 0)
+                newParam = round(upPoke['params'][item], 2) if item in ['evasion', 'armor'] else round(upPoke['params'][item], 0)
+                text += f'- **{await AllockatePokemons(item)}:** `[{oldParam} -> {newParam}]` {maximusENV if item == 'armor' else ''}{maximusARM if item == 'evasion' else ''}\n'
+        for item in upPoke['curr']:
+            if upPoke['curr'][item] != oldPoke['curr'][item]: text += f'- **{await AllockatePokemons(item)}:** `[{oldPoke['curr'][item]:.0f} -> {upPoke['curr'][item]:.0f}]`\n'
         
-        diePoke['other_param']['supports'] -= 1
-        diePoke['other_param']['supports_percent_up'] -= 0.01
+        if upRank  and upPoke['rank'] != 'S':
+            text += f'\nПонимон претерпел эволюцию: `[{oldPoke['rank']} -> {upPoke['rank']}]`\n'
+
+            oldSup = copy.copy(upPoke['other_param']['supports'])
+            upPoke['other_param']['supports'] = 0
+        else:
+            oldSup = copy.copy(upPoke['other_param']['supports'])
+            upPoke['other_param']['supports'] += 1
+        
+        innerID = diePoke['innerID']
+        DIEids, DIEseq = innerID.split('-')
+        del userBag[DIEids][DIEseq]
+        if len(userBag[DIEids]) == 0: del userBag[DIEids]
 
         upPoke['other_param']['supports_percent_up'] += 0.01
-        text += f'- Поддержек: `[→{upPoke['other_param']['supports']}]`\n- Усиление от поддержки: `[→{upPoke['other_param']['supports_percent_up']:.0%}]`'
+        text += f'- Поддержек: `[{oldSup}→{upPoke['other_param']['supports']}]`\n- Усиление от поддержки: `[{upPoke['other_param']['supports_percent_up']-0.01:.0%}→{upPoke['other_param']['supports_percent_up']:.0%}]`'
 
         await saveBagUserFile(userBag, user)
-        message = await inter.response.edit_message(embed=disnake.Embed(title='Итоги усиления', description=text, colour=disnake.Color.purple()), components=None)
-        await closeEmbedMessageAfter(message, time=60)
+        await inter.response.edit_message(embed=disnake.Embed(title='Итоги усиления', description=text, colour=disnake.Color.purple()), components=None)
+        await closeEmbedMessageAfter_Interaction(message=inter.message, responce=inter.followup, time=60)
         return
 
-    @commands.command(name='support', aliases=['пдж', 'поддержка', 'sup'])
-    async def support(self, ctx):        
+    @commands.command(name='support', aliases=['поддержка', 'sup'])
+    async def support(self, ctx):   
+
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='support')
+            return
+        else: del userEnter
+
+        checkFight = await checkInFightStatus(uid=ctx.author.id)
+        if checkFight:
+            await ctx.send(embed=disnake.Embed(description='**Ой! Похоже вы находитесь в бою!**\n**Во время боя нельзя прокачивать понимонов**'))
+            return
+
         name = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
         if name == ctx.message.content.split(' ')[0]:
             await ctx.send(embed=disnake.Embed(description='Не введено ничего. Для дополнительной справке по использованию, обратитесь к справке. Команда: `[!help поддержка]`'))
@@ -1555,15 +2060,20 @@ class Economics(commands.Cog):
         
         findSupPokes = await findID_PokemonInDB_LikeName(PokemonName=SupPoke)
         if findSupPokes is None:
-            await ctx.send(embed=disnake.Embed(description=f'Покемон `[{SupPoke}]` - не был обнаружен. Вы правильно ввели его название?'))
+            await ctx.send(embed=disnake.Embed(description=f'Понимон `[{SupPoke}]` - не был обнаружен. Вы правильно ввели его название?'))
             return
         findDiePokes = await findID_PokemonInDB_LikeName(PokemonName=diePoke)
         if findDiePokes is None:
-            await ctx.send(embed=disnake.Embed(description=f'Покемон `[{diePoke}]` - не был обнаружен. Вы правильно ввели его название?'))
+            await ctx.send(embed=disnake.Embed(description=f'Понимон `[{diePoke}]` - не был обнаружен. Вы правильно ввели его название?'))
             return
         
         userBag = await giveUserBag(user=ctx.author.id)
-        SupPokes = userBag[findSupPokes]
+
+        try: SupPokes = userBag[findSupPokes]
+        except: return await ctx.send(embed=disnake.Embed(description=f'**Похоже вы не обладаете `[{SupPoke}]`**'))
+
+        try: DiePokes = userBag[findDiePokes]
+        except: return await ctx.send(embed=disnake.Embed(description=f'**Похоже вы не обладаете `[{diePoke}]`**'))
 
         optionsSupPoke = []
         for index, item in enumerate(SupPokes):
@@ -1576,7 +2086,7 @@ class Economics(commands.Cog):
         optionsSupPoke.sort(key=lambda x: int(x.value.split('|')[2]), reverse=True)
         
         view = ViewSelectToSupPoke(options=optionsSupPoke, user=ctx.author.id, userBag=userBag, diePokes=findDiePokes)
-        await ctx.send(embed=disnake.Embed(description='### Какого покемона вы желаете улучшить?', colour=disnake.Color.dark_green()), view=view)
+        await ctx.send(embed=disnake.Embed(description='### Какого понимона вы желаете улучшить?', colour=disnake.Color.dark_green()), view=view)
 
     @commands.Cog.listener('on_button_click')
     async def upPokeLictener(self, inter: disnake.MessageInteraction):
@@ -1602,57 +2112,59 @@ class Economics(commands.Cog):
         
         ids, seq = pid.split('-')
         poke = userBag[ids][seq]
+        oldPoke = copy.deepcopy(poke)
         
         if poke['other_param']['lvl'] == 25: 
-            await inter.response.edit_message(embed=disnake.Embed(title='Покемон достиг максимального уровня.', description=''), components=None)
+            await inter.response.edit_message(embed=disnake.Embed(title='Понимон достиг максимального уровня.', description=''), components=None)
             return
 
         if comm == 'UPPPATK':
-            text = f'Улучшение параметра урона: `[{poke['params']['attack']} -> {round(poke['params']['attack'] * 1.1)}]`' 
+            text = f'🔪 | Улучшение параметра урона: `[{poke['params']['attack']} -> {round(poke['params']['attack'] * 1.1)}]`' 
             poke['params']['attack'] = round(poke['params']['attack'] * 1.1)
 
         if comm == 'UPPPHP':
-            text = f'Улучшение параметра здоровья: `[{poke['params']['healpoint']} -> {round(poke['params']['healpoint'] * 1.1)}]`'
+            text = f'💖 | Улучшение параметра здоровья: `[{poke['params']['healpoint']} -> {round(poke['params']['healpoint'] * 1.1)}]`'
             poke['params']['healpoint'] = round(poke['params']['healpoint'] * 1.1)
 
         if comm == 'UPPPDEF':
-            text = f'Улучшение параметра защиты: `[{poke['params']['armor']} -> {round(poke['params']['armor'] * 1.1, 2)}]`'
+            text = f'🛡 | Улучшение параметра защиты: `[{poke['params']['armor']} -> {round(poke['params']['armor'] * 1.1, 2)}]`'
             poke['params']['armor'] = round(poke['params']['armor'] * 1.1, 2)
 
             if poke['params']['armor'] >= 0.8:
                 poke['params']['armor'] = 0.8
-                text = f'Параметр защиты достиг максимума: `[{poke['params']['armor']} -> 0.8 (MAX)]`'
+                text = f'🛡 | Параметр защиты достиг максимума: `[{oldPoke['params']['armor']} -> 0.8 (MAX)]`'
 
         if comm == 'UPPPEVN':
-            text = f'Улучшение параметра уворота: `[{poke['params']['evasion']} -> {round(poke['params']['evasion'] * 1.1, 2)}]`'
+            text = f'🦋 | Улучшение параметра уворота: `[{poke['params']['evasion']} -> {round(poke['params']['evasion'] * 1.1, 2)}]`'
             poke['params']['evasion'] = round(poke['params']['evasion'] * 1.1, 2)
 
             if poke['params']['evasion'] >= 0.8:
                 poke['params']['evasion'] = 0.8
-                text = f'Параметр уворота достиг максимума: `[{poke['params']['evasion']} -> 0.8 (MAX)]`'
+                text = f'🦋 | Параметр уворота достиг максимума: `[{oldPoke['params']['evasion']} -> 0.8 (MAX)]`'
 
         if comm == 'UPPPREG':
-            text = f'Улучшение параметра регенерации: `[{poke['params']['regen']} -> {round(poke['params']['regen'] * 1.1)}]`'
+            text = f'💞 | Улучшение параметра регенерации: `[{poke['params']['regen']} -> {round(poke['params']['regen'] * 1.1)}]`'
             poke['params']['regen'] = round(poke['params']['regen'] * 1.1)
 
         # Цена
         if comm == 'UPPPR':
-            text = f'Улучшение параметра цены: `[{poke['curr']['price']} -> {round(poke['curr']['price'] * 1.1)}]`'
+            text = f'💵 | Улучшение параметра цены: `[{poke['curr']['price']} -> {round(poke['curr']['price'] * 1.1)}]`'
             poke['curr']['price'] = round(poke['curr']['price'] * 1.1)
 
         # Доход
         if comm == 'UPPINC':
-            text = f'Улучшение параметра дохода: `[{poke['curr']['income']} -> {round(poke['curr']['income'] * 1.1)}]`'
+            text = f'💹 | Улучшение параметра дохода: `[{poke['curr']['income']} -> {round(poke['curr']['income'] * 1.1)}]`'
             poke['curr']['income'] = round(poke['curr']['income'] * 1.1)
 
         # Мощность
         if comm == 'UPPPINC':
-            text = f'Улучшение параметра мощи: `[{poke['curr']['power']} -> {round(poke['curr']['power'] * 1.1, 2)}]`'
+            text = f'🔥 | Улучшение параметра усиления дохода: `[{poke['curr']['power']} -> {round(poke['curr']['power'] * 1.1, 2)}]`'
             poke['curr']['power'] = round(poke['curr']['power'] * 1.1, 2)
 
         poke['other_param']['exp'] -= pokesToNextLvLExp(rank=poke['rank'], lvl=poke['other_param']['lvl'])
         poke['other_param']['lvl'] += 1
 
+        poke['other_param']['essence_drop'] += randint(1, 10)
         await saveBagUserFile(userBag, int(user))
 
         countUppes = len(inner['butt'])
@@ -1666,17 +2178,31 @@ class Economics(commands.Cog):
                     button.append(disnake.ui.Button(style=disnake.ButtonStyle(value=zup[item][cax]['style']), label=zup[item][cax]['label'], custom_id=zup[item][cax]['custom_id']))
             else: inner['butt'].pop(0)
 
-            await inter.response.edit_message(embed=disnake.Embed(title=f'Улучшение {poke['name']}',description=text, colour=disnake.Color.purple()).set_footer(text=f'Количество возможныхулучшений: {countUppes}'), components=button)
+            await inter.response.edit_message(embed=disnake.Embed(title=f'Улучшение {poke['name']}',description=text, colour=disnake.Color.purple()).set_footer(text=f'Количество возможных улучшений: {countUppes}'), components=button)
         else:
 
             text2 = f'{text}\nНа этом все.'
             await inter.response.edit_message(embed=disnake.Embed(title=f'Улучшение [{poke['name']}]',description=text2, colour=disnake.Color.purple()).set_footer(text=f'Больше нет доступных улучшений.'), components=None)
 
+        
         with open('../PonyashkaDiscord/config/tempoUppPoke.json', 'w', encoding='utf-8') as file:
             json.dump(listButtons, file, indent=3, ensure_ascii=False)
 
     @commands.command(name='upgradepoke', aliases=['upp', 'улучшение'])
     async def upPoke(self, ctx):
+
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='upgradepoke')
+            return
+        else: del userEnter
+
+        checkFight = await checkInFightStatus(uid=ctx.author.id)
+        if checkFight:
+            await ctx.send(embed=disnake.Embed(description='**Ой! Похоже вы находитесь в бою!**\n**Во время боя нельзя улучшать понимонов**'))
+            return
+
         '''Улучшение покемона по достижению предела опыта'''
         name = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
         if name == ctx.message.content.split(' ')[0]:
@@ -1690,7 +2216,7 @@ class Economics(commands.Cog):
         
         idsPoke = await findID_PokemonInDB_LikeName(PokemonName=pokeName)
         if idsPoke is None:
-            await ctx.send(embed=disnake.Embed(description=f'`Возможно вы ошиблись в названии покемона. Система не обнаружила: [{pokeName}]`', colour=disnake.Color.dark_red()))
+            await ctx.send(embed=disnake.Embed(description=f'`Возможно вы ошиблись в названии понимона. Система не обнаружила: [{pokeName}]`', colour=disnake.Color.dark_red()))
             return
         
         try:
@@ -1716,26 +2242,32 @@ class Economics(commands.Cog):
             else: continue
         else: del exLvl, exExp
 
+        #? Тут я хотел бы попытаться сделать реализацию через wait_for, дабы не разбивать на отдельную функцию или не делать принудительно.
+        # Если человек отказался, то продолжается выполнение этой функции, в ином случае перекидывается в саб-функцию через listener
+        countMemorySoul = db.Poke(user=ctx.author.id).takeAll()[5]
+        if countMemorySoul > 0:
+            pass
+
         if countUppes == 0:
-            await ctx.send(embed=disnake.Embed(description=f'**Похоже ваш покемон ещё не достаточно накопил сил, для микро-эволюции.**\n', colour=disnake.Color.purple()))
+            await ctx.send(embed=disnake.Embed(description=f'**Похоже ваш понимон ещё не достаточно накопил сил, для микро-эволюции.**\n', colour=disnake.Color.purple()))
             return
-        
+
         buttons = {
         'params':{
-            'attack':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='Атака', custom_id=f'UPPPATK|{ctx.author.id}|{idsPoke}-{seq}'),
-            'healpoint':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='Здоровье', custom_id=f'UPPPHP|{ctx.author.id}|{idsPoke}-{seq}'),
-            'armor':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='Броня', custom_id=f'UPPPDEF|{ctx.author.id}|{idsPoke}-{seq}'),
-            'evasion':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='Уклонение', custom_id=f'UPPPEVN|{ctx.author.id}|{idsPoke}-{seq}'),
-            'regen':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='Регенерация', custom_id=f'UPPPREG|{ctx.author.id}|{idsPoke}-{seq}'),
+            'attack':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='🔪 Атака', custom_id=f'UPPPATK|{ctx.author.id}|{idsPoke}-{seq}'),
+            'healpoint':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='💖 Здоровье', custom_id=f'UPPPHP|{ctx.author.id}|{idsPoke}-{seq}'),
+            'armor':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='🛡 Броня', custom_id=f'UPPPDEF|{ctx.author.id}|{idsPoke}-{seq}'),
+            'evasion':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='🦋 Уклонение', custom_id=f'UPPPEVN|{ctx.author.id}|{idsPoke}-{seq}'),
+            'regen':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='💞 Регенерация', custom_id=f'UPPPREG|{ctx.author.id}|{idsPoke}-{seq}'),
             },
         'curr':{
-            'price':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='Цена', custom_id=f'UPPPR|{ctx.author.id}|{idsPoke}-{seq}'),
-            'income':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='Доход', custom_id=f'UPPINC|{ctx.author.id}|{idsPoke}-{seq}'),
-            'power':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='Усиление дохода', custom_id=f'UPPPINC|{ctx.author.id}|{idsPoke}-{seq}'),
+            'price':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='💵 Цена', custom_id=f'UPPPR|{ctx.author.id}|{idsPoke}-{seq}'),
+            'income':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='💹 Доход', custom_id=f'UPPINC|{ctx.author.id}|{idsPoke}-{seq}'),
+            'power':disnake.ui.Button(style=disnake.ButtonStyle.blurple, label='🔥 Усиление дохода', custom_id=f'UPPPINC|{ctx.author.id}|{idsPoke}-{seq}'),
             }
         }
 
-        message = await ctx.send(embed=disnake.Embed(title=f'Улучшение {poke['name']}', description='Улучшение покемона происходит на каждом уровне. \nОднако может быть улучшен только один из трех предложенных параметров.', colour=disnake.Color.purple()).set_footer(text=f'Количество возможных улучшений: {countUppes}'))
+        message = await ctx.send(embed=disnake.Embed(title=f'Улучшение {poke['name']}', description='Улучшение понимона происходит на каждом уровне. \nОднако может быть улучшен только один из трех предложенных параметров.', colour=disnake.Color.purple()).set_footer(text=f'Количество возможных улучшений: {countUppes}'))
 
         try:
             with open('../PonyashkaDiscord/config/tempoUppPoke.json', 'r', encoding='utf-8') as file:
@@ -1774,50 +2306,317 @@ class Economics(commands.Cog):
         with open('../PonyashkaDiscord/config/tempoUppPoke.json', 'w', encoding='utf-8') as file:
             json.dump(listButtons, file, indent=3, ensure_ascii=False)
 
-        
-
-
-        # import pprint
-        # pprint.PrettyPrinter(width=5).pprint(self.buttonsToUpper)
-
-        # cup = disnake.ui.Button(style=disnake.ButtonStyle(value=1), label='12', custom_id='22')
-        # butt = cup.to_component_dict()
-        # print(butt)
-        # print(cup)
-        # print(disnake.ui.Button(style=disnake.ButtonStyle(value=butt['style']), label=butt['label'], custom_id=butt['custom_id']))
-
     @commands.command(name='remelting', aliases=['плавка', 'переплавка', 'rem'])
     async def remelting(self, ctx):
 
-        
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='remelting')
+            return
+        else: del userEnter
+
+        checkFight = await checkInFightStatus(uid=ctx.author.id)
+        if checkFight:
+            await ctx.send(embed=disnake.Embed(description='**Ой! Похоже вы находитесь в бою!**\n**Во время боя нельзя плавить понимонов.**'))
+            return
 
         name = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        orderRanks = ['?', 'EX', 'S', 'A', 'B', 'C', 'D', 'E', 'F']
+        pokemonsList = name.split(', ')
+        userBag = await giveUserBag(user=ctx.author.id)
+
         if name == ctx.message.content.split(' ')[0]:
-            await ctx.send(embed=disnake.Embed(description='Не введено ничего. Для дополнительной справке по использованию, обратитесь к pokedex. Команда: `[!pokedex улучшение]`', colour=disnake.Color.dark_red()))
+            await ctx.send(embed=disnake.Embed(description='`Пустой ввод. Для дополнительной справки добавьте флаг ? или help`', colour=disnake.Color.dark_red()))
             return
         
-        # Форма конкретного покемона list<<name>-<seq>>
-        async def oncePoke():
-            try: pokeName, seq = name.split('-')
-            except: 
-                return ctx.send(embed=disnake.Embed(description='Введена некорректная форма. \nКорректная форма: !upp `<name>-<seq>`', colour=disnake.Color.dark_red()))
+        # Функция для удаления работающего покемона из списка работающих
+        # Первая грубая, смотрящая только на название покемона, вторая деликатная, смотрящая ещё и на зарабаоток
+        def injectWorkFile(user, pokemon):
+            with open(f'../PonyashkaDiscord/content/lotery/user_pet_in_work/{user}.json', 'r', encoding='UTF-8') as file:
+                userWorkPoke = json.load(file)
+            for item in userWorkPoke:
+                try: 
+                    if userWorkPoke[item]['name'] == pokemon['name']: userWorkPoke[item] = None
+                except: pass
+
+        errorsInput = []
+        endSelled = []
+        # endSelled = (commandToSell, sellValueList, pokeHowSell)
+
+        async def mainFunc(mass:bool, pokemonName):
+            if type(pokemonName) == list: pokemon = pokemonName[0]
+            else: pokemon = pokemonName
+            if '-all' in pokemon or mass: flag = 'all'
+            else: flag = 'one'
+
+            RankedOrNot = True
+            if pokemon.upper() in orderRanks: RankedOrNot = False
+            else:
+                pokemonID = await findID_PokemonInDB_LikeName(PokemonName=pokemon)
+
+                if pokemonID is None:
+                    try:
+                        try:
+                            ids, seq = pokemon.split('=')
+                            pokemon_likeName = await findMap_PokemonInDB_LikeID(ID=ids)
+                            pokemonID = ids
+                        except:
+                            pokemon_likeName = await findMap_PokemonInDB_LikeID(ID=pokemon)
+                            pokemonID = pokemon
+                    except:
+                        try:
+                            pokeName, seq = pokemon.split('=')
+                            pokemonID = await findID_PokemonInDB_LikeName(PokemonName=pokeName)
+                            if pokemonID is None: return errorsInput.append(pokemon)
+                        except: return errorsInput.append(pokemon)
+
             
-            idsPoke = await findID_PokemonInDB_LikeName(PokemonName=pokeName)
-            if idsPoke is None:
-                return ctx.send(embed=disnake.Embed(description=f'`Возможно вы ошиблись в названии покемона. Система не обнаружила: [{pokeName}]`', colour=disnake.Color.dark_red()))
+            if RankedOrNot:
+                if flag == 'all':
+                    try: 
+                        count = len(userBag[pokemonID])
+                        countCollectMemorySoul = 0
+                        for item in userBag[pokemonID]:
+                            value = userBag[pokemonID][item]['other_param']['essence_drop']
+                            valueChanceDrop = (1 + value*1.4)/(1_000_000 + value*0.8 + random.randint(round(value*0.7), round(value*1.3)))
+
+                            if random.random() < valueChanceDrop: countCollectMemorySoul += 1
+
+                            injectWorkFile(user=ctx.author.id, pokemon=userBag[pokemonID][item])
+                        else:
+                            remName = userBag[pokemonID][random.choice(list(userBag[pokemonID].keys()))]['name']
+                        
+                        ListCounter = (countCollectMemorySoul, count)
+
+                        del userBag[pokemonID]
+                        endSelled.append((True, ListCounter, remName, (False, None), (False, None)))
+                    except:
+                        pokesWhatWannaRem = await findMap_PokemonInDB_LikeID(ID=pokemonID)
+                        endSelled.append((False, (0, 0), pokesWhatWannaRem['name'], (False, None), (False, None)))
+                    await saveBagUserFile(userBag, ctx.author.id)
+
+                if flag == 'one':
+                    try:
+                        pokesToRem = userBag[pokemonID][seq]
+                        countCollectMemorySoul = 0
+                        value = pokesToRem['other_param']['essence_drop']
+                        valueChanceDrop = (1 + value*1.4)/(1_000_000 + value*0.8 + random.randint(round(value*0.7), round(value*1.3)))
+                        if random.random() < valueChanceDrop: countCollectMemorySoul += 1
+
+                        injectWorkFile(user=ctx.author.id, pokemon=userBag[pokemonID][seq])    
+
+                        del userBag[pokemonID][seq]
+                        if len(userBag[pokemonID]) == 0: del userBag[pokemonID]
+
+                        endSelled.append((True, (countCollectMemorySoul, 1), pokesToRem['name'], (False, None), (False, None)))
+                        await saveBagUserFile(userBag, ctx.author.id)
+                    except:
+                        try:
+                            options = []
+                            for index, item in enumerate(userBag[pokemonID]):
+                                options.append(
+                                    disnake.SelectOption(
+                                        label=f'({userBag[pokemonID][item]['innerID'].split('-')[1]}) {userBag[pokemonID][item]['name']}',
+                                        value=f'poke|{index+1}|{pokemonID}-{item}|{userBag[pokemonID][item]['other_param']['essence_drop']}'
+                                        )
+                                    )
+                            else:
+                                options.append(
+                                    disnake.SelectOption(
+                                        label=f'Отменить продажу',
+                                        value=f'cannelRem|null|null|999999999999999999'
+                                        )
+                                    )
+                            options.sort(key=lambda x: int(x.value.split('|')[3]), reverse=True)
+                            
+                            view = SelectMassPokemonsViewCorrectRemelting(options=options, user=ctx.author.id)
+                            embed = disnake.Embed(description='**Выберите из списка понимона.**').set_footer(text='Для переплавки всех, одного типа, используйте флаг [-all]')
+                            await ctx.send(embed=embed, view=view)
+                            return True
+                        except: 
+                            pokesWhatWannaSell = await findMap_PokemonInDB_LikeID(ID=pokemonID)
+                            endSelled.append((False, (0, 0), pokesWhatWannaSell['name'], (False, None), (False, None)))
+                return False
+            else:
+                # Когда указывается ранг который надо продать
+                pokemonRank = pokemon.upper()
+                
+                userBagPokes = []
+                ids_seq = []
+                for ids_poke in userBag:
+                    for inner in userBag[ids_poke]:
+                        if userBag[ids_poke][inner]['rank'] == pokemonRank:
+                            userBagPokes.append(userBag[ids_poke][inner])
+                            ids_seq.append((ids_poke, inner))
+
+
+                if not userBagPokes:
+                    endSelled.append((False, 0, None, (True, pokemon), (False, None)))
+                    return False
+
+                countCollectMemorySoul = 0
+                for item in userBagPokes:
+                    value = item['other_param']['essence_drop']
+                    valueChanceDrop = (1 + value*1.4)/(1_000_000 + value*0.8 + random.randint(round(value*0.7), round(value*1.3)))
+
+                    if random.random() < valueChanceDrop: countCollectMemorySoul += 1
+
+                    injectWorkFile(user=ctx.author.id, pokemon=item)
+                else:
+                    sellValueList = (countCollectMemorySoul, len(userBagPokes))
+                    endSelled.append((True, sellValueList, None, (False, None), (True,pokemon)))
+                    for item in ids_seq:
+                        del userBag[item[0]][item[1]]
+                        if len(userBag[item[0]]) == 0: del userBag[item[0]]
+                    await saveBagUserFile(userBag, ctx.author.id)
+
+        if len(pokemonsList) == 1:
+            viewStart = await mainFunc(mass=False, pokemonName=name)
+            if viewStart: return
+
+        else:
+            for item in pokemonsList:
+                await mainFunc(mass=True, pokemonName=item)
+
+        # endSelled = (commandTo, RemValueList (countGet, counRem), How, Rank, UnknowEnter, rankedSelect)
+        text = ''
+        EndCollectSoul = 0
+
+        for nums in endSelled:
+            if nums[0]: EndCollectSoul += nums[1][0]
+        if EndCollectSoul != 0:
+            db.Poke(user=ctx.author.id).add(value=EndCollectSoul, column='POKE_ESSENCE')
+
+        for index, item in enumerate(endSelled):
+            
+            if item[0] and not item[4][0]:
+
+                if item[1][1] > 1: endWords = ['и', 'ы']
+                else: endWords = ['', '']
+
+                text += f'🔥 **Понимон{endWords[1]} [{item[2]}] - {item[1][1]}x] был{endWords[0]} переплавлен{endWords[1]}, {'оказалось зря.' if round(item[1][0]) == 0 else f'в `{round(item[1][0])}` штук духовной памяти '}** \n'
+
+            elif item[0] and item[4][0]:
+                text += f'🔥 **Понимоны ранга [{item[4][1].upper()} - {item[1][1]}x] были переплавлены, {'оказалось зря.' if round(item[1][0]) == 0 else f'в `{round(item[1][0])}` штук духовной памяти '} **\n'
+
+            elif not item[0] and item[3][0]:
+                text += f'❌ **У вас нет понимонов из ранга [{item[3][1]}].**\n'
+
+            else:
+                text += f'❌ **Вы не обладаете [{item[2]}].**\n' 
+
+        else:
+            if len(errorsInput) != 0: text += '\n'
+            for item in errorsInput:
+                text += f'❓ **Ошибочный или неверный ввод:** [{item}]\n'
+        if EndCollectSoul > 0:
+            text += f'\n💰 _Всего получено духовной памяти: **`{EndCollectSoul:.0f}`**_'
+
+        embed = disnake.Embed(
+            description=text
+            ).set_footer(text=f'{'Их души, страдают во время этого процесса. Живи с этим.' if random.random() < 0.1 else ''}')
+        
+        await ctx.send(embed=embed)
+
+    @commands.Cog.listener('on_button_click')
+    async def endStepMemorySoul(self, inter: disnake.MessageInteraction):
+        trustList = ['YES-INTEGRATEMEMORYSOUL', 'NO-INTEGRATEMEMORYSOUL']
+        for item in trustList:
+            if inter.component.custom_id.startswith(item): break
+        else: return
+
+        comma, adress = inter.component.custom_id.split('|')
+        userBag = await giveUserBag(inter.author.id)
+
+        if comma == 'NO-INTEGRATEMEMORYSOUL':
+            return await inter.response.edit_message(embed=disnake.Embed(description='**Приходите позже, когда будет больше решимости.**'), components=None)
+
+        ids, seq = adress.split('-')
+        poke = userBag[ids][seq]
+        oldPoke = copy.deepcopy(poke)
+
+        params = poke['params']
+
+        params['healpoint'] *= 5
+        params['attack'] *= 5
+        params['regen'] *= 5
+
+        params['armor'] = round(params['armor'] * 2, 2)
+        params['evasion'] = round(params['evasion'] * 2, 2)
+
+        poke['other_param']['countMemorySoul'] += 1
+
+        oldParams = oldPoke['params']
+
+        text = f'Интеграция была проведена. Понимон получил нновые силы, силы для борьбы... У понимона глаза стали гореть синем пламенем...\n### |[ {poke['name']} ]|\n| 💖 **Здоровье: {oldParams['healpoint']} -> {params['healpoint']}**\n| 🔪 **Атака: {oldParams['attack']} -> {params['attack']}**\n| 💞 **Регенерация: {oldParams['regen']} -> {params['regen']}**\n| 🦋 **Уворот: {oldParams['evasion']} -> {params['evasion']}**\n|🛡 **Броня: {oldParams['armor']} -> {params['armor']}**'
+
+        await saveBagUserFile(userBag, inter.author.id)
+        await inter.response.edit_message(embed=disnake.Embed(description=text), components=None)
+
+    @commands.command(name='memorysoul', aliases=['ms', 'душа', 'возвышение'])
+    async def MemorySoul(self, ctx):
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='memorysoul')
+            return
+        else: del userEnter
+
+        checkFight = await checkInFightStatus(uid=ctx.author.id)
+        if checkFight:
+            await ctx.send(embed=disnake.Embed(description='**Ой! Похоже вы находитесь в бою!**\n**Во время боя нельзя духовно развивать понимонов**'))
+            return
+
+        '''Улучшение покемона по достижению предела опыта'''
+        name = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        if name == ctx.message.content.split(' ')[0]:
+            await ctx.send(embed=disnake.Embed(description='Не введено ничего. Для дополнительной справке по использованию, обратитесь к help. Команда: `[!ms help]`', colour=disnake.Color.dark_red()))
+            return
+        
+        try: pokeName, seq = name.split('=')
+        except: 
+            await ctx.send(embed=disnake.Embed(description='Введена некорректная форма. \nКорректная форма: !ms `<name>=<seq>`', colour=disnake.Color.dark_red()))
+            return
+        
+        idsPoke = await findID_PokemonInDB_LikeName(PokemonName=pokeName)
+        if idsPoke is None:
+            await ctx.send(embed=disnake.Embed(description=f'**`Возможно вы ошиблись в названии понимона. Система не обнаружила: [{pokeName}]`**', colour=disnake.Color.dark_red()))
+            return
+        
+        try:
             poke = (await giveUserBag(user=ctx.author.id))[idsPoke][seq]
+        except:
+            await ctx.send(embed=disnake.Embed(description=f'**`Похоже вы не обладаете: [{pokeName}={seq}]`**', colour=disnake.Color.dark_red()))
+            return
+        
+        countMemorySoul = db.Poke(ctx.author.id).takeAll()[5]
+        if countMemorySoul == 0:
+            return await ctx.send(embed=disnake.Embed(description='**У вас нет духовной памяти.**'))
+        if poke['other_param']['countMemorySoul'] == 1:
+            return await ctx.send(embed=disnake.Embed(description='**Понимон уже проходил духовное возвышение.**'))
+        
+        params = poke['params']
 
-        # Форма по типу list<name>
-        async def oneTypePoke():
-            pass
+        text = f'## Использование духовной.\nДуховная память лишь разово усилит понимона в 5х раз (2х для процентарных). Дальше его нельзя будет улучшить духовной память. (Душа не выдержит)\n\nУсиление приведет к этому:\n### |[ {poke['name']} ]|\n| 💖 **Здоровье: {params['healpoint']} -> {round(params['healpoint'] * 5)}**\n| 🔪 **Атака: {params['attack']} -> {params['attack']*5}**\n| 💞 **Регенерация: {params['regen']} -> {params['regen'] * 5}**\n| 🦋 **Уворот: {params['evasion']} -> {'0.8' if params['evasion'] * 2 >= 0.8 else f"{ params['evasion'] * 2}"}**\n|🛡 **Броня: {params['armor']} -> {'0.8' if params['armor'] * 2 >= 0.8 else f"{ params['armor'] * 2}"}**'
+        
+        buttons = [
+            disnake.ui.Button(style=disnake.ButtonStyle.green, label='Да', custom_id=f'YES-INTEGRATEMEMORYSOUL|{poke['innerID']}'),
+            disnake.ui.Button(style=disnake.ButtonStyle.red, label='Нет', custom_id=f'NO-INTEGRATEMEMORYSOUL|{poke['innerID']}')
+            ]
 
-        # Форма по рангу list<rank>
-        async def rankedRem():
-            pass
+        await ctx.send(embed=disnake.Embed(description=text).set_footer(text='Произвести интеграцию духовной памяти?'), components=buttons)
 
     @commands.command(name='marketpoke', aliases=['mp', 'магаз', 'магазин'])
     async def marketPoke(self, ctx):
         
+        try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
+        except: userEnter = None
+        if userEnter in ['?', 'help']:
+            await Until(self.bot).helpedUser(context=ctx, ctx=ctx, info='marketpoke')
+            return
+        else: del userEnter
+
         try:
             with open('../PonyashkaDiscord/content/lotery/market.yaml', 'r', encoding='utf-8') as file:
                 market = yaml.safe_load(file)
@@ -1833,13 +2632,11 @@ class Economics(commands.Cog):
 
 
         try:
-            comm = ctx.message.content.split()
-            comm.pop(0)
+            comm = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
 
             listComm = []
-            for item in comm:
-                if '-' in item:
-                    listComm.append((item.split('-')[0], item.split('-')[1]))
+            if '=' in comm:
+                listComm.append((comm.split('=')[0], comm.split('=')[1]))
         except:
             comm = None
 
@@ -1855,6 +2652,7 @@ class Economics(commands.Cog):
                     noItem = False
                     # Проверка на релевантность покупки, если там есть указанные товары
                     if market['items'][item]['name'].lower() == command[0].lower():
+
                         
                         if command[1].isdigit():
                             if int(command[1]) > 0: value = int(command[1])
@@ -1921,8 +2719,8 @@ class Economics(commands.Cog):
 
                         "added":pickle.dumps(AddedrMarket.addTiket),
 
-                        "count":random.randrange(50, 200, 5),
-                        "price":random.randrange(3500, 17500, 500),
+                        "count":random.randrange(250, 1000, 5),
+                        "price":random.randrange(5000, 50000, 500),
                         "curr":"ESSENCE", "curr_r":"es"
                         },
                     "2":{
@@ -1932,8 +2730,8 @@ class Economics(commands.Cog):
 
                         "added":pickle.dumps(AddedrMarket.addSoul),
 
-                        "count":random.randrange(200, 700, 10),
-                        "price":random.randrange(50, 300, 10),
+                        "count":random.randrange(200, 1000, 10),
+                        "price":random.randrange(100, 500, 25),
                         "curr":"SHARD", "curr_r":"sh"
                         },
                     "3":{
@@ -1943,8 +2741,8 @@ class Economics(commands.Cog):
 
                         "added":pickle.dumps(AddedrMarket.addPokeEssence),
 
-                        "count":random.randrange(200, 700, 10),
-                        "price":random.randrange(50, 750, 10),
+                        "count":random.randrange(10, 100, 5),
+                        "price":random.randrange(100, 1000, 50),
                         "curr":"SHARD", "curr_r":"sh"
                         }
                 }
@@ -1973,7 +2771,7 @@ class Economics(commands.Cog):
                     "curr_r":tere['curr_r']
                     }
             else:
-                market['config']['timestamp'] = round(time.time()) + 259200
+                market['config']['timestamp'] = round(time.time()) + 604800
 
 
                 with open('../PonyashkaDiscord/content/lotery/market.yaml', 'w', encoding='utf-8') as file:
@@ -1999,22 +2797,44 @@ class Economics(commands.Cog):
         if updateStamp:
             embed.set_footer(text='При вас торговец раставил новые товары.\nДля покупки: !mp <товар>-<количество>')
         else:
-            embed.set_footer(text=f'До завоза нового товара: [{times}]\nДля покупки: !mp <товар>-<количество>')
+            embed.set_footer(text=f'До завоза нового товара: [{times}]\nДля покупки: !mp <товар>=<количество>')
 
 
         await ctx.send(embed=embed)    
 
-    # TODO: Не забыть добавить эту наглядную команду для награждения
     @commands.command(name='buggift', aliases=['bg'])
     async def buggift(self, ctx):
+        # TODO: Не забыть добавить эту наглядную команду для награждения
         ment = ctx.message.mentions[0]
 
         await ctx.send(ment.id)
     
     #? Для разного рода маленьких проверок
     @commands.command(name='tt')
-    async def tte(self, ctx):   
-        await ctx.send(await checkInFightStatus(uid=ctx.author.id))
+    async def tte(self, ctx: disnake.ext.commands.Context):   
+        userBag = await giveUserBag(user=ctx.author.id)
+
+        poke = userBag['88']['1']
+        hp = poke['other_param']['healpoint_now']
+        regen = int(poke['params']['regen'] * poke['trait']['greenhouse'])
+        times = round(round(time.time() - int(poke['other_param']['timestamp_hp'])) // 3600)
+
+
+        await ctx.send(f'{times} ({round(time.time() - int(poke['other_param']['timestamp_hp']))}) = +{round(regen * times)}\n\n= {HPupdate(poke, ctx.author.id)['other_param']['healpoint_now']}')
+    
+    @commands.command(name='updatedata', aliases=['upd'])
+    async def updateData(self, ctx):
+        if ctx.author.id not in [374061361606688788, 621318749794074654]:
+            return await ctx.send(embed=disnake.Embed(description='Вы не обладаете должными правами.'))
+        
+        with open('../PonyashkaDiscord/content/lotery/lowLotery.json', encoding='UTF-8') as f:
+            loadPonymonBaseData = json.load(f)
+        
+        ponymons = loadPonymonBaseData['items']
+
+        # Алгоритм вечно меняется
+        for ids in ponymons:
+            pass
 
 # Загрузка кога в основное ядро по команде
 def setup(bot:commands.Bot):

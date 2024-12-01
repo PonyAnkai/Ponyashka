@@ -47,7 +47,6 @@ class RPG(commands.Cog):
             colour=color)
         await ctx.send(embed=embed)
 
-    # TODO: need think how do this
     @commands.command(name='fight', aliases=['f'])
     async def fight(self, ctx):
         
