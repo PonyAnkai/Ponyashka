@@ -11,10 +11,10 @@ from .module import REQ_database as Rdb
 db = Rdb.DataBase
 
 def banList(UID:int) -> bool:
-    with open('../PonyashkaDiscord/config/message_banList.json') as file:
+    with open('../PonyashkaDiscord/config/message_cfg.json') as file:
         config = json.load(file)
         file.close()
-        if UID in config['list']:
+        if UID in config['BanList']:
             return False
         return True
     
@@ -24,7 +24,6 @@ class Message(commands.Cog):
     
     @commands.Cog.listener()
     async def on_message(self, message):
-        
         # Установка главных переменных
         user = message.author.id
         user_name = message.author.name
@@ -34,8 +33,6 @@ class Message(commands.Cog):
         if not message.author.bot: db.Check(user_id=user, user_name=user_name).user()
         else: return
             
-
-
         try:
             con = sqlite3.connect('../PonyashkaDiscord/_system.db')
             cur = con.cursor()
@@ -43,8 +40,6 @@ class Message(commands.Cog):
             con.commit()
         except:
             pass
-
-
 
         # Проверка на упоминание пользователя и инкремент при правде
         mentioned = message.raw_mentions
@@ -59,8 +54,10 @@ class Message(commands.Cog):
                 pass
         # Проверка на личные сообщения
         if message.guild is None:
-            print(f'Личные сообщения от ({message.author.name}) >>> {message.content}')
-            return
+            if message.author.id != 374061361606688788: 
+                print(f'<< Сообщение от {message.author.name} >> [{message.content}]')
+                return
+            else: return
 
 
 
@@ -97,8 +94,9 @@ class Message(commands.Cog):
         for item in range_item_lvl: range_item_lvl_bool.append(int(item[0]) <= userLvl <= int(item[1]))
         else: del range_item_lvl
 
-        from .Message import banList
+        # from .Message import banList
         ban_list = banList(user)
+
         # Изменение ролей
         if ban_list:
             for index, item in enumerate(level_config):
@@ -116,6 +114,10 @@ class Message(commands.Cog):
         # Загрузка конфигов
         with open('../PonyashkaDiscord/config/message_cfg.json') as file:
             config = json.load(file)
+        # Буффер сообщений.
+        with open('../PonyashkaDiscord/config/buffer.json', encoding='UTF-8') as file:
+            buffer = json.load(file)
+
         # Проверка на создателя
         if message.author.id != 374061361606688788:
             # Выпадения опыта ~30% и денег с шансом ~10%
@@ -123,17 +125,33 @@ class Message(commands.Cog):
             valueRandomXP = random.randint(1, 1000)
             valueRandomM = random.randint(1, 1000)
             valuePupet = random.randint(1,5)
-            if valueRandomXP <= config['exp']:  # Выпадение опыта ')
+
+            def check_over_buffer():
+                if buffer['bufferSpam'].count(message.author.id) == 3: return False
+                else: return True
+            def append_buffer(buffer_cfg):
+                if len(buffer_cfg['bufferSpam']) < 3:
+                    buffer['bufferSpam'].append(message.author.id)
+                else:
+                    buffer['bufferSpam'].pop(0)
+                    buffer['bufferSpam'].append(message.author.id)
+                with open('../PonyashkaDiscord/config/buffer.json', 'w', encoding='UTF-8') as file:
+                    json.dump(buffer_cfg, file)
+
+            checkOverBuffer = check_over_buffer()
+            if valueRandomXP <= config['exp'] and checkOverBuffer:  # Выпадение опыта ')
                 db.Exp(user_id=user, value=valuePupet).add()
                 db.Bot(value=10).lock()
+                append_buffer(buffer)
                 return
-            elif valueRandomM <= config['money']:  # Выпадение денег
+            elif valueRandomM <= config['money'] and checkOverBuffer:  # Выпадение денег
                 val = random.randint(0, 1000)
                 if val <= config['super_money']:
                     db.Money(user=user, currency='SHARD', value=valuePupet).add()
                     return
                 db.Money(user=user, value=valuePupet).add()
                 db.Bot(value=10).lock()
+                append_buffer(buffer)
                 return
         
 

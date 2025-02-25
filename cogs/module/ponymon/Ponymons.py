@@ -13,8 +13,6 @@ from ..REQ_database import DataBase
 from random import choices, choice, randrange
 from .FightLoop import install
 
-from ..RPG.System import userData
-
 db = DataBase
 
 async def checkHavePoke(user, ids, seq=None) -> bool:
@@ -251,8 +249,7 @@ async def RollLotery(user, freeRoll: int = 0, priceTiket=100, count:int = 1, sys
     
     priceTiket = await GetTiketPrice(user)
     freeRoll = db.Poke(user).takeAll()[4]
-    user = await userData(uid=user)
-    essence = user['money']['ESSENCE']
+    essence = db.Money(user=user).have()
 
     countToRoll = freeRoll + (essence // priceTiket)
 
@@ -286,7 +283,7 @@ def savePokemon(loot, uid:int) -> None:
                 "lvl":0,
                 "exp":0,
                 "essence_drop":0,
-                "timestamp_hp":0,
+                "timestamp_hp":round(time.time()),
                 "healpoint_now":item[1]['params']['healpoint'],
                 
                 "supports":0,
@@ -319,7 +316,6 @@ def savePokemon(loot, uid:int) -> None:
             
         with open(f'../PonyashkaDiscord/content/lotery/users_bag/{uid}.json', 'w', encoding='UTF-8') as file:
             file.write(json.dumps(progress, indent=2, ensure_ascii=False))
-
 
 async def userHaveTicket(user) -> int:
     return db.Poke(user=user).takeAll()[4]
@@ -746,7 +742,7 @@ async def AllockatePokemons(name:str) -> str:
     return '`[Неизвестное]`'
 
 def pokesToNextLvLExp(rank, lvl) -> int:
-    if lvl >= 25: return False
+    if lvl >= 25: return '∞'
     
     conRPG = sqlite3.connect('../PonyashkaDiscord/_rpg.db')
     curRPG = conRPG.cursor()
@@ -939,7 +935,7 @@ async def EndSopportSelect(message, user, ids:list):
 
     await message.edit(embed=disnake.Embed(description=f'## Кубик брошен...\n`Выбор предоставлен.` \n**Вы можете улучшить [{'параметр' if roll == 'params' else 'свойство'}] у [{upPoke['name']}]:**\n{textRoll}\n').set_footer(text=f'Модификатор количества поддержек: {mapSup(str(mapedSuped)):.0%}\n{f'Данное усиление продвинет ранг понимона до {rrUped(upPoke['rank'])}' if upRank else ''}'), components=button)
 
-
+#! Дробление списков на части
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
@@ -992,19 +988,19 @@ def HPbar(percent) -> str|bool:
 def HPupdate(poke, user):
     '''Обновление состояния здоровья'''
     if poke['other_param']['healpoint_now'] == poke['params']['healpoint']: return poke
-    if poke['other_param']['timestamp_hp'] == 0: 
+
+    if poke['other_param']['timestamp_hp'] == 0 and poke['other_param']['healpoint_now'] == poke['params']['healpoint']: 
         poke['other_param']['timestamp_hp'] = round(time.time())
         saveDelicateUserBag(poke, user)
         return poke
-
-    hp = poke['other_param']['healpoint_now']
+ 
     regen = int(poke['params']['regen'] * poke['trait']['greenhouse'])
     times = round((time.time() - int(poke['other_param']['timestamp_hp'])) // 3600)
 
-    hp += round(times * regen)
-    if int(hp) > int(poke['params']['healpoint']): poke['other_param']['healpoint_now'] = poke['params']['healpoint']
+    poke['other_param']['healpoint_now'] += round(times * regen)
+    if int(poke['other_param']['healpoint_now']) > int(poke['params']['healpoint']): poke['other_param']['healpoint_now'] = poke['params']['healpoint']
 
-    if times != 0: poke['other_param']['timestamp_hp'] = round(time.time())
+    if times != 0: poke['other_param']['timestamp_hp'] += (times * 3600)
 
     saveDelicateUserBag(poke, user)
     return poke
@@ -1155,12 +1151,10 @@ async def startFight(message, users, mulp):
         description=body
         ).set_footer(text='Шаг боя: 0')
 
-    adress = (int(message.guild.id), int(message.channel.id), int(message.id))
-
     await setFightStatus(userID, status=True) #? Для первого игрока
     await setFightStatus(opponentID, status=True) #? Для второго игрока
 
-    install(users=users, players=players, adress=adress)
+    install(users=users, players=players)
     await message.edit(embed=embed, components=buttons)
 async def fightButtonsUpdateGetReady(message, p1:bool=None, p2:bool=None):
     if p1 is not None and p2 is not None:

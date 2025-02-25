@@ -27,13 +27,13 @@ class Rank:
         try: return self.cur.fetchone()[0]
         except: return None
 
-def install(users, players, adress) -> None:
+def install(users, players) -> None:
 
     data = {
         "step" : 0,
         "log":[],
+        "pathTempFile":users,
 
-        "message_adress" : list(adress),
         "Dbox" : [None],
         "Lbox" : [None],
 
@@ -349,10 +349,6 @@ class FightLoop(commands.Cog):
     def __init__(self, bot:commands.Bot):
         self.bot = bot
     
-    #! Лютый рофл, потом обмозговать
-    async def getMessageOBJ(self, message_adress) -> disnake.message:
-        return await self.bot.get_guild(message_adress['guild']).get_channel(message_adress['channel']).fetch_message(message_adress['message'])
-
     # Прослушиватель готовности к бою (Подтверждения окончания хода)
     # Такая же динамическая кнопка как и при потверждении готовности к бою
     # Если оба игрока готовы, то запуск функции NextStep
@@ -396,7 +392,8 @@ class FightLoop(commands.Cog):
 
             if not objFile.EndBattle: await fightButtonsUpdate(inter.message, p1=objFile.p1["ready"], p2=objFile.p2["ready"], bots=objFile.p2['bot'])
 
-        await inter.response.defer()
+        try: await inter.response.defer()
+        except: pass
 
     # Прослушиватель кнопки действий
     # Активация навыка не требует ОД (очков действия), но занимают выбор действия у покемона
@@ -780,7 +777,8 @@ class FightLoop(commands.Cog):
         objFile = loadObjectFight(users=users)
 
         if comm == 'escape':
-            msg = await self.bot.get_guild(inter.guild.id).get_channel(inter.channel.id).fetch_message(message)
+            if inter.guild: msg = await self.bot.get_guild(inter.guild.id).get_channel(inter.channel.id).fetch_message(message)
+            else: msg = self.bot.get_message(int(message))
 
             await inter.response.edit_message(embed=disnake.Embed(description='**Вы точно не попадёте в Вальхаллу.**'), components=None)
             await msg.edit(components=None)
@@ -792,9 +790,6 @@ class FightLoop(commands.Cog):
         else:
             await inter.response.edit_message(embed=disnake.Embed(description='**Отличное решение!**'), components=None)
 
-
-    # Прослушиватель для побега с боя
-    #? Не сделано
     @commands.Cog.listener('on_button_click')
     async def escapeFromBattle(self, inter: disnake.MessageInteraction):
         accList = ['ESCBF']
@@ -824,13 +819,13 @@ class MainLoop:
     def __init__(self, fileUsers, data=None) -> None:
 
         self.EndBattle = False
+        self.pathTempFile = data['pathTempFile']
 
         self.temporalLogs = ''
         self.log = data['log']
         self.fileUsers = fileUsers
 
         self.step = data['step']
-        self.message_adress = data['message_adress']
 
         self.Dbox = data['Dbox'],
         self.Lbox = data['Lbox'],
@@ -870,8 +865,8 @@ class MainLoop:
         data = {
             "step" : self.step,
             "log": self.log,
+            "pathTempFile": self.pathTempFile,
 
-            "message_adress" : self.message_adress,
             "Dbox": self.Dbox[0],
             "Lbox": self.Lbox[0],
 
@@ -907,6 +902,27 @@ class MainLoop:
         }
         return data
 
+
+    async def deleteTempFileFight(self):
+        import os
+        os.remove(f"./content/lotery/fight/{self.pathTempFile}.json")
+        os.remove(f"./content/lotery/fight/{self.pathTempFile}.yaml")
+
+    async def saveLogs(self, text_list):
+        endToSave = ''
+        for text in text_list:
+            listSimbol = '`*'
+            
+            for item in listSimbol:
+                text = str(text).replace(item, '')
+            
+            endToSave += f"{text}\n"
+        else:
+            endToSave += '\n=== Бой окончен ==='
+        logTime = time.strftime("[%H-%M-%S] %d-%B %Y", time.localtime())
+        with open(f'./content/lotery/logs/{str(logTime)}.txt', 'w', encoding='UTF-8') as f:
+            f.write(endToSave)
+        await self.deleteTempFileFight()
 
     async def savePokemonsPVP(self, winner, looser, deleteMap):
 
@@ -948,6 +964,7 @@ class MainLoop:
                 ids, seq = pokes.split('-')
                 ponymon = copy.deepcopy(userBag[ids][seq])
                 del userBag[ids][seq]
+                if len(userBag[ids]) == 0: del userBag[ids]
                 
                 ponymon['other_param']['healpoint_now'] = ponymon['params']['healpoint']
                 ponymon['other_param']['timestamp_hp'] = round(time.time())
@@ -955,8 +972,10 @@ class MainLoop:
 
                 await saveHellMarket_DeadFight(ponymon=ponymon)
         
+        else:
             await saveBagUserFile(userBag, item)
 
+        await self.saveLogs(self.log)
 
     async def savePokemonsPVE_BASE(self, winner, looser, deleteMap):
 
@@ -1002,9 +1021,10 @@ class MainLoop:
                 ponymon['other_param']['timestamp_hp'] = round(time.time())
 
                 userBag[ids][seq] = ponymon
-        
+        else:
             await saveBagUserFile(userBag, item)
 
+        await self.saveLogs(self.log)
 
     async def RunAwayFromBattle(self, message, Runner_id):
         #? При побеге бегущие получают урон в 15% от здоровья
@@ -1043,7 +1063,8 @@ class MainLoop:
 
         self.EndBattle = True
 
-        Rank(user=Runner_id).downRank(value=2)
+        Rank(user=runner).downRank(value=2)
+        Rank(user=winner).upRank(value=1)
 
         await setFightStatus(self.p1['id'], status=False) #? Для первого игрока
         await setFightStatus(self.p2['id'], status=False) #? Для второго игрока
@@ -1052,6 +1073,7 @@ class MainLoop:
         else: await self.savePokemonsPVP(winner, runner, deleteMap)
 
         await message.edit(embed=disnake.Embed(description=f'## Один из игроков решил сделать побег.\nПонимоны игрока, что убежал, потеряли 15% здоровья, так как не стрелять в спину убегающего, глупо.\nСбежавший: -2 рейтинга.\n\n`<<< Умершие понимоны >>>`\n{deadly}'))
+        await self.saveLogs(self.log)
 
     async def battleEnd(self, message,  winner,  looser):
         '''Учесть, что следует удалить у покемонов перед сохранением: moveCount, modifacators'''
@@ -1074,8 +1096,8 @@ class MainLoop:
 
             if not (winner['bot'] or looser['bot']):
 
-                ramExp = random.randint(50, 300)
-                stepExp = (self.step * 3) if (self.step * 3) <= 150 else 150 
+                ramExp = random.randint(300, 800)
+                stepExp = (self.step * 10) if (self.step * 10) <= 500 else 150 
                 seqRank = 0
 
                 expGen = ramExp + stepExp + seqRank
@@ -1150,7 +1172,6 @@ class MainLoop:
 
         if self.p2['bot']: await self.savePokemonsPVE_BASE(winner, looser, deleteMap)
         else: await self.savePokemonsPVP(winner, looser, deleteMap)
-
     
     # Обновление страницы информации, конечная точка расчетов
     async def updatePage(self, message, embed):
@@ -1198,6 +1219,7 @@ class MainLoop:
         plyersBox.remove(firstPunch)
         secondPunch = plyersBox[0]
 
+        self.temporalLogs += f'**>>> Шаг боя: {self.step}**\n'
         self.temporalLogs += f'**`|[ {firstPunch['name']} ]|`**\n'
         for index, item in enumerate(firstPunch['pokemons']):
             if firstPunch['move'][item] is None:
@@ -1241,7 +1263,7 @@ class MainLoop:
             elif str(firstPunch['move'][item]).startswith('sheal'):
                 await self.selfHeal(firstPunch['pokemons'][item])
         
-        self.temporalLogs += f'\n**`|[ {secondPunch['name']} ]|`**\n'
+        self.temporalLogs += f'**`|[ {secondPunch['name']} ]|`**\n'
         for index, item in enumerate(secondPunch['pokemons']):
             if secondPunch['move'][item] is None:
                 command = 'atk'
@@ -1288,7 +1310,7 @@ class MainLoop:
         embed = updateMainText(self)
         await self.updatePage(message=message, embed=embed)
 
-
+    #! Базовые действия, что есть у игрока всегда
     async def attack(self, attacked, target, who):
         atk = round(attacked['params']['attack'] * (1 - (target['params']['armor'])))
         diapATK = random.randint(round(atk*0.8), round(atk*1.2))
@@ -1335,15 +1357,18 @@ class MainLoop:
     async def selfHeal(self, target):
         heal = target['params']['regen'] + round(target['params']['healpoint'] * 0.10)
 
-        target['other_param']['healpoint_now'] += heal
+        healDiap = random.randint(round(heal*0.5), round(heal*1.5))
+
+        target['other_param']['healpoint_now'] += healDiap
         if target['other_param']['healpoint_now'] > target['params']['healpoint']: 
             minus = target['other_param']['healpoint_now'] - target['params']['healpoint']
             target['other_param']['healpoint_now'] = target['params']['healpoint']
-            heal = heal - minus
+            healDiap = healDiap - minus
 
-        self.temporalLogs += f'**[{target['name']}] `вылечил` себя на {heal}hp**\n'
+        self.temporalLogs += f'**[{target['name']}] `вылечил` себя на {healDiap}hp**\n'
 
 
+    #! Под навыки и их распределение
     async def usePerk(toWhom, perk_slot, whoUse):
         ''' 
         toWhom= На кого применется (при all, на всех)\n
@@ -1352,6 +1377,8 @@ class MainLoop:
         '''
         pass
     
+
+    #! Особые действия, что есть у игроков не всегда
     async def DefenceModifacator(toWhom, whoUse, whatUse):
         pass
     async def EvasionModifacator(toWhom, whoUse, whatUse):

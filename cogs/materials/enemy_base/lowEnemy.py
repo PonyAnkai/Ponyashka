@@ -3,9 +3,9 @@ import json
 
 from random import choice, randint
 
-with open('../PonyashkaDiscord/content/fight/data/namingEnemy.json', 'r') as file: 
+with open('../PonyashkaDiscord/content/RPG/fight/data/namingEnemy.json', 'r') as file: 
     namingEnemy = json.load(file)
-with open('../PonyashkaDiscord/content/fight/enemy_content/lowEnemy.json') as file:
+with open('../PonyashkaDiscord/content/RPG/fight/enemy_content/lowEnemy.json') as file:
     assets = json.load(file)
 
 class Goblin(Base):

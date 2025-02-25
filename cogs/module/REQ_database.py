@@ -32,6 +32,10 @@ class DataBase:
             if cur.fetchone() is None:
                 num+= 1
                 cur.execute("INSERT INTO user_wins_max VALUES (?, ?, ?, ?)", (self.user_id, 0, 0, 0))
+            cur.execute(f'SELECT uid FROM rep WHERE uid = {self.user_id}')
+            if cur.fetchone() is None:
+                num+= 1
+                cur.execute(f"INSERT INTO rep (UID) VALUES ({self.user_id})")
 
 
             #? Pokefile
@@ -93,8 +97,8 @@ class DataBase:
             con.commit()
             if num!= 0:
                 print(f'Create new record {self.user_id} / Update poss: {num}')
-                return False
-            return True
+                return False, num
+            return True, 0
         
         def bot(self):
             cur.execute('SELECT * FROM bot')
@@ -139,7 +143,10 @@ class DataBase:
         def have(self) -> int:
             curRPG.execute(f'SELECT {self.currency} FROM user_money WHERE UID = {self.user}')
             return curRPG.fetchone()[0]
-        
+        def allMoney(self) -> tuple:
+            curRPG.execute(f'SELECT * FROM user_money WHERE UID = {self.user}')
+            return curRPG.fetchone()
+
     class Info:
         def __init__(self, user_id= None):
             self.user_id= user_id
@@ -370,11 +377,40 @@ class DataBase:
                 return False
             return True
 
+    class Rep:
+        def __init__(self, user_id) -> None:
+            self.user_id = user_id
+        
+        def get_user_rep(self) -> int | tuple:
+            '''Give a one rep record user'''
+            cur.execute(f'SELECT rep FROM rep WHERE UID = {self.user_id}')
+            return cur.fetchone()[0]
+        def get_rep(self) -> tuple:
+            '''Give a all rep record'''
+            cur.execute(f'SELECT * FROM rep')
+            return cur.fetchall()
+        def set_rep(self, value) -> None:
+            '''Set a value rep to specified'''
+            cur.execute(f"UPDATE rep SET rep = {value} WHERE UID = {self.user_id}")
+            con.commit()
+        def add_value(self, value):
+            '''Add value into rep'''
+            if curRPG.fetchone()[0] + value <= 0: 
+                cur.execute(f"UPDATE rep SET rep = rep + {value} WHERE UID = {self.user_id}")
+            else: return False
+            con.commit()
+        def sub_value(self, value):
+            '''Minus value into rep'''
+            cur.execute(f'SELECT rep FROM rep WHERE UID = {self.user_id}')
+            if curRPG.fetchone()[0] - value >= 0: 
+                curRPG.execute(f'UPDATE rep SET rep = rep - {value} WHERE UID = {self.user_id}')
+            else: return False
+            con.commit()
 
-    # TODO: Releaze function what can delet record from db. this need for delete data leave user.
+    # TODO: Releaze function what can delete record from db. this need for delete data leave user.
     class DeleteData:
-        def __init__(self, user_id:int):
-            self.user_id = id
+        def __init__(self, user_id = None):
+            self.user_id = user_id
         
         def delete(self):
             list_rpg = ['user_money', 'user_active_inventory', 'user_blocktime', 'user_diplomaty', 'user_ds_info', 'user_equipment', 'user_main_info', 'user_parametr', 'user_reputation', 'user_terms', 'user_poke']

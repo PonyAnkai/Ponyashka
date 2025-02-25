@@ -89,7 +89,7 @@ async def dialogWithoutSelect(text:list, tempo:int, message:object, end_button:o
 #? command for load dictonary user data, what need to statistic embed
 async def userData(uid:int) -> dict:
     try:
-        with open(f'../PonyashkaDiscord/content/user/{uid}.json', encoding='UTF-8') as file:
+        with open(f'../PonyashkaDiscord/content/RPG/user/{uid}.json', encoding='UTF-8') as file:
             userDataJ = json.load(file)
             file.close() 
     except:
@@ -105,10 +105,10 @@ async def userData(uid:int) -> dict:
                 "SPECIAL":{}
                 }
             }
-        with open(f'../PonyashkaDiscord/content/user/{uid}.json', 'w', encoding='UTF-8') as file:
+        with open(f'../PonyashkaDiscord/content/RPG/user/{uid}.json', 'w', encoding='UTF-8') as file:
             file.write(json.dumps(loadUserData, indent=3, ensure_ascii=False))
             file.close()
-        with open(f'../PonyashkaDiscord/content/user/{uid}.json', 'r', encoding='UTF-8') as file:
+        with open(f'../PonyashkaDiscord/content/RPG/user/{uid}.json', 'r', encoding='UTF-8') as file:
             userDataJ = json.load(file)
             file.close()
         

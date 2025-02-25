@@ -32,10 +32,10 @@ async def segment(
         name_button:str
     ) -> None:
     
-    with open(f'../PonyashkaDiscord/content/dialogs/{fileName}.json', encoding='UTF-8') as file:
+    with open(f'../PonyashkaDiscord/content/RPG/dialogs/{fileName}.json', encoding='UTF-8') as file:
         scene = json.load(file) # id(F/S/T|X-Y):{text:[], select:[], (optional)mode:[]}
         settings = scene['setting'] # tempo, image
-    with open(f'../PonyashkaDiscord/content/dialogs/temporal_dialog/{author_id}.json', encoding='UTF-8') as file:
+    with open(f'../PonyashkaDiscord/content/RPG/dialogs/temporal_dialog/{author_id}.json', encoding='UTF-8') as file:
         metadata = json.load(file) # id:str, next:id+1 , message_id:int
     
     metadata['id'] = segment
@@ -66,7 +66,7 @@ async def segment(
             buttons.append(disnake.ui.Button(style=disnake.ButtonStyle.gray, label=item, custom_id=f'{name_button}{index+1}')) 
 
     #? Save metadata
-    with open(f'../PonyashkaDiscord/content/dialogs/temporal_dialog/{author_id}.json', 'w', encoding='UTF-8') as file:
+    with open(f'../PonyashkaDiscord/content/RPG/dialogs/temporal_dialog/{author_id}.json', 'w', encoding='UTF-8') as file:
         file.write(json.dumps(metadata, indent=3, ensure_ascii=False))
 
     for index, item in enumerate(phase[f'text_{metadata['buffer']}']):
@@ -90,7 +90,7 @@ class Dialogs(commands.Cog):
     async def first_talk_with_player(self, inter:disnake.MessageInteraction):
         if inter.component.custom_id not in ['first_talk_with_player', 'start_prologe1', 'start_prologe2', 'start_prologe3']:
             return
-        with open(f'../PonyashkaDiscord/content/dialogs/temporal_dialog/{inter.author.id}.json', encoding='UTF-8') as file:
+        with open(f'../PonyashkaDiscord/content/RPG/dialogs/temporal_dialog/{inter.author.id}.json', encoding='UTF-8') as file:
             metadata = json.load(file) # id:int, message_id:int
         
         if inter.component.custom_id in ['start_prologe1', 'start_prologe2', 'start_prologe3'] and metadata['exit']:
@@ -115,7 +115,7 @@ class Dialogs(commands.Cog):
     async def testingDialogs(self, inter:disnake.MessageInteraction):
         if inter.component.custom_id not in ['testDialog', 'testingDialogs1', 'testingDialogs2', 'testingDialogs3']:
             return
-        with open(f'../PonyashkaDiscord/content/dialogs/temporal_dialog/{inter.author.id}.json', encoding='UTF-8') as file:
+        with open(f'../PonyashkaDiscord/content/RPG/dialogs/temporal_dialog/{inter.author.id}.json', encoding='UTF-8') as file:
             metadata = json.load(file) # id:int, message_id:int
         
         if inter.component.custom_id in ['testingDialogs1', 'testingDialogs2', 'testingDialogs3'] and metadata['exit']:

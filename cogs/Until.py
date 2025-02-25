@@ -1,12 +1,15 @@
 import disnake
 from disnake.ext import commands
 
-import asyncio
 import time
+import requests
+import asyncio
+import sqlite3 as sql
 
 from .module import System as sys
 from .module import REQ_database as Rdb
 from .module import Views as View
+from .materials import glory_patern as gp
 
 db = Rdb.DataBase
 
@@ -68,7 +71,7 @@ class Until(commands.Cog):
     def __init__(self, bot=commands.Bot):
         self.bot = bot
     
-    @commands.command(name='leaders', aliases=['lead', 'лидеры', 'топ'])
+    @commands.command(name='leaders', aliases=['lead', 'лидеры'])
     async def leaders(self, ctx):
 
         try: userEnter = ctx.message.content.replace(f'{ctx.message.content.split(' ')[0]} ', '')
@@ -226,7 +229,7 @@ class Until(commands.Cog):
 Для дополнительной информации о каждой команде по отдельности используйте: `!help <название>` **->** `(!help work)` либоже после команды указать `?` **->** `(!work ?)`. Если что-то сильно не понятно, спрашивайте у администратора - Поня.
 
 <:SoundGood:1306072180693401690> **Общие команды:**
-`leaders` `avatar` `rand` `gif` `russianrollete` `coin`
+`leaders` `avatar` `rand` `gif` `russianrollete` `coin` `brainfuck` `profile` `dice` `r34` `wordl`
 
 <:ohYa:1306072065543114752> **Команды понимонов**:
 `wallet` `work` `lotery` `craft` `uncraft` `sellpoke` `setpokework` `lookdivpoke` `look` `lookbag` `fightpoke` `setfightgroup` `tradepoke` `support` `upgradepoke` `remelting` `marketpoke` `memorysoul`
@@ -280,25 +283,13 @@ class Until(commands.Cog):
 
         if ctx.message.raw_mentions:
             mentioned = ctx.guild.get_member(ctx.message.raw_mentions[0])
-            embed = disnake.Embed(title=f'Аватар пользователя: {mentioned.name}')
+            embed = disnake.Embed(title=f'-> Аватар пользователя: {mentioned.name}')
             embed.set_image(mentioned.avatar)
             await ctx.send(embed=embed)
             return
-        embed = disnake.Embed(title=f'Аватар пользователя: {ctx.message.author.name}')
+        embed = disnake.Embed(title=f'- Аватар пользователя: {ctx.message.author.name}')
         embed.set_image(ctx.message.author.avatar)
         await ctx.send(embed=embed)
-    
-        import requests
-
-        raw = ctx.guild.get_member(ctx.message.raw_mentions[0])
-        avatar = raw.avatar
-        responce = requests.get(url=avatar)
-        with open(f'../PonyashkaDiscord/content/avatar/{raw.id}.png', 'wb') as file:
-            file.write(responce.content)
-            file.close()
-
-        await ctx.send(f'/ all ok')
-
 
     @commands.command(name='clearconsole', aliases=['cls'])
     async def clearConsole(self, ctx):
@@ -321,6 +312,105 @@ class Until(commands.Cog):
         embed = disnake.Embed(title=text)
         await ctx.send(embed=embed)
 
+    @commands.command(name='profile', aliases=['prof', 'Profile', 'pf'])
+    async def profile(self, ctx):
+        db.Check(user_id=ctx.author.id, user_name=ctx.author.name).user()
+        home_path = f'./content/LP/'
+
+        with open(home_path + 'profile.html', encoding='UTF-8') as f: html_to_reduct = f.read()
+        
+        # download avatar
+        responce = requests.get(url=ctx.author.avatar)
+        with open(f'../PonyashkaDiscord/content/LP/icon.png', 'wb') as file:
+            file.write(responce.content)
+
+        # get user nick/name
+        try:
+            name = ctx.author.nick
+            if not name: name = ctx.author.name
+        except: name = ctx.author.name
+
+        # get a user title
+        title = gp.get_title(UID=ctx.author.id)
+
+        # need for user_need_exp
+        user_exp = db.Info(user_id=ctx.author.id).takeFromRPG(table='user_main_info')[2],
+        lvl_search = db.Info().positionLVL(exp=user_exp[0])
+        con = sql.connect('../PonyashkaDiscord/_rpg.db')
+        cur = con.cursor()
+        cur.execute(f'SELECT expTotal FROM levels WHERE lvl = {lvl_search+1}')
+        x = cur.fetchone()
+        user_need_exp = x[0] if x else 150
+
+        # get a top
+        usersE = db.Info().takeFromRPG(table='user_main_info')
+        usersM = db.Info().takeFromRPG(table='user_money')
+        usersR = db.Rep(user_id=ctx.author.id).get_rep()
+        topListE = {}
+        for index, item in enumerate(usersE):
+            topListE[item[0]] = [item[2], item[1]]
+        # Сортировка занесенных в список участников
+        sortTopListE = sorted(topListE.items(), key= lambda items: items[1], reverse=True)
+        # Поиск места в топе автора вызова лидерборда
+        callAuthorE = None
+        for index, item in enumerate(sortTopListE):
+            if ctx.author.id == int(item[0]):
+                callAuthorE = index+1
+        topListM = {}
+        for index, item in enumerate(usersM):
+            summ = item[1] + item[2]*400 + item[3]*3200 + item[4]*6400
+            topListM[item[0]] = [summ, item[1], item[2], item[3], item[4]]
+        # Сортировка занесенных в список участников
+        sortTopListM = sorted(topListM.items(), key= lambda items: items[1], reverse=True)
+        # Поиск места в топе автора вызова лидерборда
+        callAuthorM = None
+        for index, item in enumerate(sortTopListM):
+            if ctx.author.id == int(item[0]):
+                callAuthorM = index+1
+        # Сортировка занесенных в список участников
+        sortTopListR = sorted(usersR, key= lambda items: items[1], reverse=True)
+        callAuthorR = None
+        for index, item in enumerate(sortTopListR):
+            if ctx.author.id == int(item[0]):
+                callAuthorR = index+1
+
+
+
+        html_to_reduct = html_to_reduct.format(
+            user_name=name,
+            user_title=title,
+            user_have_exp=user_exp[0],
+            user_need_exp=user_need_exp,
+            user_rep=db.Rep(user_id=ctx.author.id).get_user_rep(),
+            user_top_exp=gp.rank_colored(int(callAuthorE)),
+            user_top_money=gp.rank_colored(int(callAuthorM)),
+            user_top_rep=gp.rank_colored(int(callAuthorR)),
+            glory_content=gp.glory_content(ctx.author.id)
+            )
+        
+        with open(home_path + 'profile_reduct.html', 'w', encoding='UTF-8') as f:
+            f.write(html_to_reduct)
+
+        from pathlib import Path
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+
+        file_name = home_path + 'profile_reduct.html'
+        options = Options()
+        options.add_argument('--headless')
+        driver = webdriver.Chrome(options=options)
+        driver.set_window_size(700, 600)
+
+        driver.get('file://' + str(Path(file_name).resolve()))
+        driver.save_screenshot(file_name.replace('.html', '') + '.png')
+        driver.close()
+
+        await ctx.send(file=disnake.File(home_path + 'profile_reduct.png'))
+        # await ctx.send(embed=embed2)
+
+    @commands.command(name='tt')
+    async def tt(self, ctx):
+        gp.glory_content(ctx.author.id)
 
 # Загрузка кога в основное ядро по команде
 def setup(bot:commands.Bot): 

@@ -10,7 +10,6 @@ import time
 import random
 
 from .module.ponymon.Ponymons import *
-from .module.RPG.System import *
 from .module.Views import *
 from .Until import Until
 
@@ -29,7 +28,7 @@ class AddedrMarket:
         db.Money(user=user, value=value, currency='SOUL').add()
         
     def addPokeEssence(user, value, price):
-        db.Money(user=user, value=value*price).sub()
+        db.Money(user=user, value=value*price, currency='SHARD').sub()
         db.Poke(user=user).add(value=value, column='POKE_ESSENCE')
 
 class Economics(commands.Cog):
@@ -47,11 +46,10 @@ class Economics(commands.Cog):
         else: del userEnter
 
         user = ctx.message.author.id
-        stat = await userData(uid=user)
+        stat = db.Money(user=ctx.author.id).allMoney()
         poke = db.Poke(user=ctx.author.id).takeAll()
-        
-        money = stat['money']
-        text = f'## Шэкэли, что ты насобирал \n```Эссенции: {money['ESSENCE']:,}\nОсколки: {money['SHARD']:,}\nДуши: {money['SOUL']:,}``````Кристальные души: {money['CRISTALL_SOUL']:,}``````Монеты «Коширского»: {money['COU']:,}\nМонеты «Сущности»: {money['ACOIN']:,}\nМонеты «Пустоты»: {money['VCOIN']:,}\nМонеты «Истины»: {money['TCOIN']:,}``` ```Билеты: {poke[4]}\nЭссенции монстра: {poke[5]}```'
+
+        text = f'## Шэкэли, что ты насобирал \n```Эссенции: {stat[1]:,}\nОсколки: {stat[2]:,}\nДуши: {stat[3]:,}``````Кристальные души: {stat[4]:,}``````Монеты «Коширского»: {stat[5]:,}\nМонеты «Сущности»: {stat[6]:,}\nМонеты «Пустоты»: {stat[7]:,}\nМонеты «Истины»: {stat[8]:,}``` ```Билеты: {poke[4]}\nЭссенции монстра: {poke[5]}```'
 
         embed = disnake.Embed(
             description=text
@@ -72,10 +70,12 @@ class Economics(commands.Cog):
             return
         else: del userEnter
 
-        if db.Lock(user_id=ctx.author.id, slot=1).ready() or ctx.author.id == 374061361606688788:
+        readyToWork = True if db.Poke(ctx.author.id).takeAll()[2] < round(time.time()) else False
+
+        if readyToWork:
             db.Check(user_id=ctx.author.id, user_name=ctx.author.name).user()
             cashIncome = await calculateValueWorkPokemon(user=ctx.author.id, sys=True)
-            
+
             info = db.Poke(user=ctx.author.id).takeAll()
             strikeMulti = await checkStrikeWork(info[1])
             timestamp = (round(time.time()) - info[2])//3600
@@ -105,11 +105,11 @@ class Economics(commands.Cog):
                 elif dropstrike:
                     db.Poke(user=ctx.author.id).update(value=round(time.time()))
                     db.Poke(user=ctx.author.id).update(value=0, time=False)
-                db.Poke(user=ctx.author.id).update(value=14_400)
+                db.Poke(user=ctx.author.id).update(value=14400)
                 await ctx.send(embed=embed)
             else: await ctx.send('Сообщите поню, я опять сломана')
         else:
-            to_formated_time = db.Lock(user_id=ctx.author.id, slot=1).info()[0] - round(time.time())
+            to_formated_time = db.Poke(ctx.author.id).takeAll()[2] - round(time.time())
             end_time = time.strftime('%H:%M:%S', time.gmtime(to_formated_time))
             embed = disnake.Embed(description=f'### Не торопитесь так сильно\n`приходите через: {end_time}`', colour=disnake.Colour.dark_red())
             embed.set_footer(text=f'Вызвал: {ctx.author.name}')
@@ -226,8 +226,7 @@ class Economics(commands.Cog):
         else: del userEnter
 
         # TODO: Добавить использование билетов, если они есть, а также подтверждение, если недостающую часть будет догонятся деньгами.
-        user = await userData(ctx.author.id)
-        essence = user['money']['ESSENCE']
+        essence = db.Money(user=ctx.author.id).have()
         freeRoll = db.Poke(ctx.author.id).takeAll()[4]
 
         priceTiket = await GetTiketPrice(ctx.author.id)
@@ -245,10 +244,9 @@ class Economics(commands.Cog):
             embed.set_footer(text=f'Крутил барабан: <{ctx.author.name}> | Цена за тикет = <{priceTiket}>\nБилетов: {freeRoll}')
 
             message = await ctx.send(embed=embed, components=data['buttons'])
-            await closeEmbedMessageAfter(message, time=120)
+            await closeEmbedMessageAfter(message, time=180)
         elif countToRoll >= 5:
-            user = await userData(ctx.author.id)
-            essence = user['money']['ESSENCE']
+            essence = db.Money(user=ctx.author.id).have()
             buttons = await checkButtonsLotery(countRoll=countToRoll)
 
             embed = disnake.Embed(
@@ -258,7 +256,7 @@ class Economics(commands.Cog):
             embed.set_footer(text=f'Вызвал: {ctx.author.name}')
 
             message = await ctx.send(embed=embed, components=buttons)
-            await closeEmbedMessageAfter(message, time=60)
+            await closeEmbedMessageAfter(message, time=180)
         else:
             embed = disnake.Embed(
                 description=f'```Похоже у вас не хватает средств и билетов.\nСтоимость 1 крутки для вас равна {priceTiket} шекелям.```',
@@ -1129,9 +1127,14 @@ class Economics(commands.Cog):
             pokesEXPneed = pokesToNextLvLExp(rank=poke['rank'], lvl=poke['other_param']['lvl'])
 
 
-            tump = ' **(N-UP)**' if pokesEXPneed <= poke['other_param']['exp'] else ''
+            if type(pokesEXPneed)!= str: 
+                tump = ' **(N-UP)**' if pokesEXPneed >= poke['other_param']['exp'] else ''
+                tump = ' **(MAX)**' if int(poke['other_param']['lvl']) == 25 else ''
+            else: 
+                tump = ' **(MAX)**'
+                
+
             lvls = ' **(MAX)**' if int(poke['other_param']['lvl']) >= 25 else ''
-            tump = ' **(MAX)**' if int(poke['other_param']['lvl']) >= 25 else ''
             maxSup = '**MAX**' if poke['rank'] in ['S', 'EX'] and poke['other_param']['supports'] == rrNeedSUP(poke['rank']) else ''
             maxARM = '**(MAX)**' if poke['params']['armor'] >= 0.8 else ''
             maxEVN = '**(MAX)**' if poke['params']['evasion'] >= 0.8 else ''
@@ -1196,8 +1199,18 @@ class Economics(commands.Cog):
         to_dell = []
         for item in stat_list:
             if stat_list[item]['author'] == ctx.author.id:
-                msg = await self.bot.get_guild(ctx.guild.id).get_channel(ctx.message.channel.id).fetch_message(item)
-                await msg.edit(embed=disnake.Embed(description='**Было вызвано иное окно.**'), components=None)
+
+                if ctx.guild: 
+                    try: msg = await self.bot.get_guild(ctx.guild.id).get_channel(ctx.message.channel.id).fetch_message(int(item))
+                    except: continue
+
+                else: 
+                    try: msg = self.bot.get_message(int(item))
+                    except: pass
+
+                try: await msg.edit(embed=disnake.Embed(description='**Было вызвано иное окно.**'), components=None)
+                except: pass
+
                 to_dell.append(item)
         else:
             for dell in to_dell:
@@ -1600,6 +1613,11 @@ class Economics(commands.Cog):
             if inter.component.custom_id.startswith(item): break
         else: return
 
+        checkFight = await checkInFightStatus(uid=inter.author.id)
+        if checkFight:
+            await inter.response.edit_message(embed=disnake.Embed(description='**Ой! Похоже вы находитесь в бою!**\n**Во время боя нельзя изменять боевую группу.**'))
+            return
+
         comm, user = inter.component.custom_id.split('|')
         _, slot = comm.split('-')
 
@@ -1835,7 +1853,7 @@ class Economics(commands.Cog):
                         pokesEntrade['owner'] = mentionedUser.id
                         if mentionedUser.id not in pokesEntrade['holder']: pokesEntrade['holder'].append(mentionedUser.id)
                         pokesEntrade['innerID'] = str(f'{ids}-{num}')
-                        pokesEntrade['other_param']['essence_drop'] += randint(1, 5)
+                        pokesEntrade['other_param']['essence_drop'] += random.randint(1, 5)
                         userBag2[ids][num] = pokesEntrade
 
                         hardSaveBag(user=ctx.author.id, file=userBag1)
@@ -1944,7 +1962,7 @@ class Economics(commands.Cog):
         upPoke = HPupdate(upPoke, inter.author.id)
         diePoke = HPupdate(diePoke, inter.author.id)
 
-        upPoke['other_param']['essence_drop'] += randint(5, 10)
+        upPoke['other_param']['essence_drop'] += random.randint(5, 10)
         maximusARM = ''
         maximusENV = ''
         if comm == 'SUPATK':
@@ -1982,11 +2000,11 @@ class Economics(commands.Cog):
             upPoke['params']['armor'] = round(upPoke['params']['armor'] * (rankedBoost(upPoke['rank']))[1], 2)
             if upPoke['params']['armor'] >= 0.8:
                 upPoke['params']['armor'] = 0.8
-                maximusARM = 'MAX'
+                maximusARM = '**MAX**'
             upPoke['params']['evasion'] = round(upPoke['params']['evasion'] * (rankedBoost(upPoke['rank']))[1], 2)
             if upPoke['params']['evasion'] >= 0.8:
                 upPoke['params']['evasion'] = 0.8
-                maximusENV = 'MAX'
+                maximusENV = '**MAX**'
 
             upPoke['curr']['price'] = round(upPoke['curr']['price'] * (rankedBoost(upPoke['rank']))[0])
             upPoke['curr']['income'] = round(upPoke['curr']['income'] * (rankedBoost(upPoke['rank']))[0])
@@ -1996,7 +2014,7 @@ class Economics(commands.Cog):
             upPoke['other_param']['lvl'] = 0
             
             upPoke['rank'] = rrUped(upPoke['rank'])
-            upPoke['other_param']['essence_drop'] += randint(20, 50)
+            upPoke['other_param']['essence_drop'] += random.randint(20, 50)
         
 
         
@@ -2164,7 +2182,7 @@ class Economics(commands.Cog):
         poke['other_param']['exp'] -= pokesToNextLvLExp(rank=poke['rank'], lvl=poke['other_param']['lvl'])
         poke['other_param']['lvl'] += 1
 
-        poke['other_param']['essence_drop'] += randint(1, 10)
+        poke['other_param']['essence_drop'] += random.randint(1, 10)
         await saveBagUserFile(userBag, int(user))
 
         countUppes = len(inner['butt'])
@@ -2543,7 +2561,9 @@ class Economics(commands.Cog):
         params['regen'] *= 5
 
         params['armor'] = round(params['armor'] * 2, 2)
+        if params['armor'] >= 0.8: params['armor'] = 0.8
         params['evasion'] = round(params['evasion'] * 2, 2)
+        if params['evasion'] >= 0.8: params['evasion'] = 0.8
 
         poke['other_param']['countMemorySoul'] += 1
 
@@ -2808,19 +2828,6 @@ class Economics(commands.Cog):
         ment = ctx.message.mentions[0]
 
         await ctx.send(ment.id)
-    
-    #? Для разного рода маленьких проверок
-    @commands.command(name='tt')
-    async def tte(self, ctx: disnake.ext.commands.Context):   
-        userBag = await giveUserBag(user=ctx.author.id)
-
-        poke = userBag['88']['1']
-        hp = poke['other_param']['healpoint_now']
-        regen = int(poke['params']['regen'] * poke['trait']['greenhouse'])
-        times = round(round(time.time() - int(poke['other_param']['timestamp_hp'])) // 3600)
-
-
-        await ctx.send(f'{times} ({round(time.time() - int(poke['other_param']['timestamp_hp']))}) = +{round(regen * times)}\n\n= {HPupdate(poke, ctx.author.id)['other_param']['healpoint_now']}')
     
     @commands.command(name='updatedata', aliases=['upd'])
     async def updateData(self, ctx):
