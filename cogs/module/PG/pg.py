@@ -1132,6 +1132,9 @@ class PG(commands.Cog):
             dataPlayer = os.listdir(f'./content/PG/Game')
             await ctx.send(dataPlayer)
 
+        elif userEnter == "update":
+            pass
+
     @commands.command(name='gd')
     async def gd(self, ctx):
 
