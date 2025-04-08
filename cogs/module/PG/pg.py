@@ -442,7 +442,7 @@ class PG(commands.Cog):
 
             embed = disnake.Embed(
                 title='Общая информация о вашем государстве',
-                description=f'**Название:** `[{nameCounty}]`\n**Мувов:** `[{dataCountry['mainInfo']['moves']}]`\n**Площадь страны:** `[{reduct(sizeCountry) if type(sizeCountry) == int else sizeCountry}]`\n**Нация игрока:** `[{nationalPlayer}]` `({percentNationalPlayer:.2%})`\n\n**Главенствующая религия:** `[{mainReligion}]` `({percentReligionAddept:.2%})`\n**Главенствующая идеалогия:** `[{mainIdea}]` `({percentIdeaAddept:.2%})`\n**Путь развития:** `[{mainWay}]` `({percentWayAddept/1000:.2%})`\n**Форма правления:** `[{mainFormGoverment}]` `({percentGovermentSuport/1000:.2%})`\n\n**Численность населения:** `{reduct(countHumans)}` `существ`\n**Бюджет страны:** `{reduct(budgetCountry)}` `({reduct(growthTrendCountry)}/ход)`\n\n**Уровень божественности:** `[{stepDevelopmentGod(GODLVL)}]`\n**Уровень технологий:** `[{stepDevelopment(TECHLVL)}]`\n**Уровень магии:** `[{stepDevelopmentMana(MANALVL)}]`\n**Уровень праны:** `[{stepDevelopmentPrana(PRANALVL)}]`\n\n**Главная проблема:** `[{mainProblemCountry}]`\n\n**Репутация:** `[{repMaps(dataCountry['politics']['rep'])}]`'
+                description=f'**Название:** `[{nameCounty}]`\n**Мувов:** `[{dataCountry['mainInfo']['moves']}]`\n**Шаг цикла:** `[{config["population_settings"]["step_circle"]}]`\n**Площадь страны:** `[{reduct(sizeCountry) if type(sizeCountry) == int else sizeCountry}]`\n**Нация игрока:** `[{nationalPlayer}]` `({percentNationalPlayer:.2%})`\n\n**Главенствующая религия:** `[{mainReligion}]` `({percentReligionAddept:.2%})`\n**Главенствующая идеалогия:** `[{mainIdea}]` `({percentIdeaAddept:.2%})`\n**Путь развития:** `[{mainWay}]` `({percentWayAddept/1000:.2%})`\n**Форма правления:** `[{mainFormGoverment}]` `({percentGovermentSuport/1000:.2%})`\n\n**Численность населения:** `{reduct(countHumans)}` `существ`\n**Бюджет страны:** `{reduct(budgetCountry)}` `({reduct(growthTrendCountry)}/ход)`\n\n**Уровень божественности:** `[{stepDevelopmentGod(GODLVL)}]`\n**Уровень технологий:** `[{stepDevelopment(TECHLVL)}]`\n**Уровень магии:** `[{stepDevelopmentMana(MANALVL)}]`\n**Уровень праны:** `[{stepDevelopmentPrana(PRANALVL)}]`\n\n**Главная проблема:** `[{mainProblemCountry}]`\n\n**Репутация:** `[{repMaps(dataCountry['politics']['rep'])}]`'
                 )
             Fuser = await self.bot.fetch_user(selectedUser)
             embed.set_footer(text=f'Игрок: {Fuser}')
@@ -1053,7 +1053,7 @@ class PG(commands.Cog):
                     json.dump(temp, f, ensure_ascii=False, indent=2)
             
             #? Автоматика для ботов 
-            with open (f'./content/PG', encoding='UTF-8') as f: botsData = json.load(f) 
+            with open (f'./content/PG/bots.json', encoding='UTF-8') as f: botsData = json.load(f) 
             for bot in botsData:
                 botSelect = botsData[bot]
 
@@ -1076,7 +1076,7 @@ class PG(commands.Cog):
 
 
             else:
-                with open (f'./content/PG', 'w', encoding='UTF-8') as f: json.dump(botsData, f) 
+                with open (f'./content/PG/bots.json', 'w', encoding='UTF-8') as f: json.dump(botsData, f) 
 
             # Шерстение и закидывания в статистику
             for user in afterDataPlayer:
@@ -1126,14 +1126,14 @@ class PG(commands.Cog):
                         }
                 
             DataBase().add_stat_graph(step=config['step'], data=listDataJson)
-            await ctx.send(f'Автоматические расчеты сделаны. Остальное - ручками.\nSTEP={config['step']}\n\nПрирост населения по миру +[{randAdd_bot}]\n{info_problem}')
+            await ctx.send(f'Автоматические расчеты сделаны. Остальное - ручками.\nSTEP={config['step']}\n\nПрирост населения по миру +[{world_population_increase}]\n{info_problem}')
 
         elif userEnter == 'steps':
             dataPlayer = os.listdir(f'./content/PG/Game')
             await ctx.send(dataPlayer)
 
         elif userEnter == "update":
-            pass
+            form = ['']
 
     @commands.command(name='gd')
     async def gd(self, ctx):

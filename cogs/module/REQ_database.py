@@ -407,7 +407,7 @@ class DataBase:
             else: return False
             con.commit()
 
-    # TODO: Releaze function what can delete record from db. this need for delete data leave user.
+    # TODO: Сделать систему по удалению данных пользователей из БД
     class DeleteData:
         def __init__(self, user_id = None):
             self.user_id = user_id

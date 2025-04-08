@@ -786,9 +786,9 @@ class Fun(commands.Cog):
                     for i, v in enumerate(out): 
                         if len(out)-1 != i: t_out += f'{v}, '
                         else: t_out += f'{v}'
-                    text_output += f'**[{item}]** -> `{t_out}`\n'
+                    text_output += f'**[{item}]** —> `{t_out}`\n'
                 except:
-                    text_output += f'**[{item}]** i> ошибочный ввод\n'
+                    text_output += f'**[{item}]** —> ошибочный ввод\n'
 
             await ctx.send(embed=disnake.Embed(description=text_output))
         except HTTPException:

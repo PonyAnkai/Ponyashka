@@ -225,7 +225,6 @@ class Economics(commands.Cog):
             return
         else: del userEnter
 
-        # TODO: Добавить использование билетов, если они есть, а также подтверждение, если недостающую часть будет догонятся деньгами.
         essence = db.Money(user=ctx.author.id).have()
         freeRoll = db.Poke(ctx.author.id).takeAll()[4]
 
@@ -308,7 +307,6 @@ class Economics(commands.Cog):
             )
         embed.set_footer(text=f'Вызвал: {ctx.author.name}')
         message = await ctx.send(embed=embed)
-        # TODO: Enable after update
         await closeEmbedMessageAfter(message, time=60)
 
     @commands.Cog.listener("on_button_click")

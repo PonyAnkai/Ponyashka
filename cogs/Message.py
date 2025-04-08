@@ -22,6 +22,14 @@ class Message(commands.Cog):
     def __init__(self, bot=commands.Bot):
         self.bot = bot
     
+    @commands.command(name='ls')
+    async def ls(self, ctx):
+        if str(ctx.author.id) not in ['374061361606688788']: return
+        user = await self.bot.fetch_user(602153237591752704)
+        text = 'Есть ещё какие-то вопросы?'
+        print(f'<< Сообщение {user.name} >> [{text}]')
+        await user.send(text)
+
     @commands.Cog.listener()
     async def on_message(self, message):
         # Установка главных переменных

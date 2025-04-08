@@ -236,13 +236,6 @@ class Testing(commands.Cog):
         responce = await el(self.bot).MoneyIncome(ctx.author, value=15)
         await ctx.send(f"{responce}")
 
-    @commands.command(name='ls')
-    async def ls(self, ctx):
-        user = await self.bot.fetch_user(602153237591752704)
-        text = 'Есть ещё какие-то вопросы?'
-        print(f'<< Сообщение {user.name} >> [{text}]')
-        await user.send(text)
-
     @commands.command(name='ck')
     async def ck(self, ctx):
 

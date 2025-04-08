@@ -218,7 +218,6 @@ class Until(commands.Cog):
         view = View.DropDownViewLeader(map=maps, user=user, time=time.time()+180)
         await ctx.send(embed=embed_exp, view=view)
     
-    # TODO: on when got ready a litle RPG content 
     @commands.command(name='help', aliases=['Help', 'помощь', 'Помощь', 'хелп', 'Хелп']) #aliases=['хелп', 'помощь', 'команды']
     async def helpedUser(self, ctx, info=None):
 
